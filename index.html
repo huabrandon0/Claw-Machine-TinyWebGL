@@ -1,0 +1,479 @@
+<!-- Graphics Example Code.  index.html - The web page document containing the canvas (drawing surface), that launches your javascript files.  By Garett //-->
+<!DOCTYPE html> <html> <head> <meta charset="UTF-8"/> <link rel="icon" href="assets/fav.ico">
+<script type="text/javascript" src="tinywebgl-ucla.js" ></script>  <!--  Javascript "include" files.  Any code in them gets executed as part of the page loading. //-->
+<script type="text/javascript" src="dependencies.js"   ></script>
+<script type="text/javascript"> "use strict"    
+  window.onload = function init()        // ********************* THE ENTRY POINT OF THE WHOLE PROGRAM STARTS HERE ********************* 
+    { window.contexts = {};                                                            // A global variable, "contexts".  Browsers support up to 16 WebGL contexts per page.
+      
+      const scenes  = [ "My_Animation", "Movement_Controls", "Global_Info_Table", "Gameplay_Controls" ]; // Register some scenes to the "Canvas_Manager" object -- which WebGL calls
+                                                                                       // upon every time a draw / keyboard / mouse event happens.  
+      
+      if( eval( "typeof " + scenes[0] ) !== "undefined" )
+      { document.getElementById( "canvases" ).appendChild( Object.assign( document.createElement( "canvas" ), { id: "main_canvas", width: 800, height: 600 } ) );
+        contexts[ "main_canvas" ] = new Canvas_Manager( "main_canvas", Color.of( 0,0,0,1 ), scenes );   // Manage the WebGL canvas.  Second parameter sets background color.
+        for( let c in contexts ) contexts[ c ].render();     // Call render() for each WebGL context on this page.  Then render() will re-queue itself for more calls.
+        
+        Code_Manager.display_code( eval( scenes[0] ) );                                  // Display the code for our demo on the page, starting with the first scene in the list.
+        for( let list of [ core_dependencies, all_dependencies ] )
+        document.querySelector( "#class_list" ).rows[2].appendChild( Object.assign( document.createElement( "td" ), { 
+          innerHTML: list.reduce( (acc, x) => acc += "<a href='javascript:void(0);' onclick='Code_Manager.display_code(" + x + ")'>" + x + "</a><br>", "" ) } ) );        
+        document.getElementsByName( "main_demo_link" )[0].innerHTML = "<a href='javascript:void(0);' onclick='Code_Manager.display_code(" + scenes[0] + ")'>" + scenes[0] + "</a><br>";
+        document.querySelector("#code_display").innerHTML = "Below is the code for the demo that's running:<br>&nbsp;<br>" + document.querySelector("#code_display").innerHTML;             
+      }
+      
+      document.querySelector("#edit_button").addEventListener('click', () => {
+        code_panel.style.display=class_list.style.display='none'; new_demo_source_code.style.display='block'; 
+        document.getElementsByName( 'new_demo_code' )[0].value=code_display.dataset.displayed.toString() } )
+      const form = document.forms.namedItem("new_demo_source_code");
+      form.addEventListener('submit', function(event) 
+        { if( document.getElementsByName( "finished" )[0].checked )
+            alert( "Your demo will be submitted.  If approved, you will start being asked for a password to make any further updates to it.  This password "
+                 + "will appear right now, below the submit button, and then (assuming submission worked) it will never appear again.  Write it down." );
+          var xhr = new XMLHttpRequest();
+          xhr.open("POST", "/submit-demo?Unapproved", true);
+          xhr.responseType = "json";
+          xhr.onload = function(event) 
+          { if (xhr.status != 200) { document.querySelector("#submit_result").textContent = "Error " + xhr.status + " when trying to upload."; return }
+            document.querySelector("#submit_result").textContent = this.response.message;
+            // if( this.response.hide_finished_checkbox ) { document.getElementsByName( "finished" )[0].checked = false; expert_panel.style.display = "none" }
+            if( this.response.show_password  ) document.getElementsByName( "password" )[0] .style.display = "inline";
+            if( this.response.show_overwrite ) document.querySelector( "#overwrite_panel" ).style.display = "inline";
+          };
+          xhr.setRequestHeader("Content-Type", "application/json");
+          xhr.send( JSON.stringify( Array.from( form.elements ).reduce( ( accum, elem ) => 
+            { if( elem.value && !( ['checkbox', 'radio'].includes(elem.type) && !elem.checked ) ) accum[elem.name] = elem.value; return accum }, {} ) ) );
+          event.preventDefault();
+        }, false);      
+    }
+
+class Gameplay_Controls extends Scene_Component
+{ constructor( context, canvas = context.canvas )
+    { super( context );
+      Object.assign( this,
+              { w_key: 0,
+                a_key: 0,
+                s_key: 0,
+                d_key: 0,
+                z_key: 0,
+                space_key: 0,
+                thrust: Vec.of(0,0,0)
+              } );
+      
+      // Claw transform
+      this.claw_tf = function() { return context.globals.claw_tf };
+      context.globals.claw_tf = Mat4.translation( Vec.of( 0, 30, 0 ) );
+      
+      // Whether the target of the controls is the claw
+      this.target_is_claw = function() { return context.globals.target_is_claw }
+      context.globals.target_is_claw = false;
+      
+      // Whether the drop claw animation is playing
+      this.is_grabbing = function() { return context.globals.is_grabbing };
+      context.globals.is_grabbing = false;
+      
+      // Claw arm rotation transform
+      this.claw_rot_tf = function() { return context.globals.claw_rot_tf };
+      context.globals.claw_rot_tf = Mat4.identity();
+      
+      // Whether the return claw animation is playing
+      this.is_returning = function() { return context.globals.is_returning };
+      context.globals.is_returning = false;
+      
+      // Drop claw coroutine
+      this.grab_animation = this.coroutine( function*()
+        {
+          while (true)
+            {
+              while (!context.globals.is_grabbing)
+                {
+                  yield;
+                }
+              
+              ///////////////////////
+              // Lowering the claw //
+              ///////////////////////
+              
+              var total_time = 1000;
+              var start_time = context.globals.graphics_state.animation_time;
+              var duration_time = context.globals.graphics_state.animation_time - start_time;
+              
+              var drop_thrust = Vec.of( 0, 1, 0 );
+              
+              var raised_pos = Mat4.identity().times( context.globals.claw_tf );
+              var lowered_pos = raised_pos.times( Mat4.translation( drop_thrust.times( -total_time/50 ) ) );
+              
+              while (duration_time < total_time )
+              {
+                yield;
+                var meters_per_frame = context.globals.graphics_state.animation_delta_time/50;
+                context.globals.claw_tf.post_multiply( Mat4.translation( drop_thrust.times( -meters_per_frame ) ) );
+                duration_time = context.globals.graphics_state.animation_time - start_time;
+              }
+              
+              // Making the lowered position accurate
+              context.globals.claw_tf.post_multiply( Mat4.inverse( context.globals.claw_tf ) ).post_multiply( lowered_pos );
+              
+              /////////////////////////////
+              // Gripping with the claws //
+              /////////////////////////////
+              
+              total_time = 1000;
+              start_time = context.globals.graphics_state.animation_time;
+              duration_time = context.globals.graphics_state.animation_time - start_time;
+              
+              while ( duration_time < total_time )
+              {
+                yield;
+                context.globals.claw_rot_tf.post_multiply( Mat4.inverse( context.globals.claw_rot_tf ) ).post_multiply( Mat4.rotation( Math.PI/12 * (Math.sin( Math.PI * duration_time/total_time )), Vec.of( 1, 0, 0 ) ) );
+                duration_time = context.globals.graphics_state.animation_time - start_time;
+              }
+              
+              // Making sure
+              context.globals.claw_rot_tf.post_multiply( Mat4.inverse( context.globals.claw_rot_tf ) );
+              
+              //////////////////////
+              // Raising the claw //
+              //////////////////////
+              
+              total_time = 1000;
+              start_time = context.globals.graphics_state.animation_time;
+              duration_time = context.globals.graphics_state.animation_time - start_time;
+              
+              var lift_thrust = Vec.of( 0, -1, 0 );
+              
+              while ( duration_time < total_time )
+              {
+                yield;
+                var meters_per_frame = context.globals.graphics_state.animation_delta_time/50;
+                context.globals.claw_tf.post_multiply( Mat4.translation( lift_thrust.times( -meters_per_frame ) ) );
+                duration_time = context.globals.graphics_state.animation_time - start_time;
+              }
+              
+              // Making sure the claw is back to start position
+              context.globals.claw_tf.post_multiply( Mat4.inverse( context.globals.claw_tf ) ).post_multiply( raised_pos );
+             
+              
+              context.globals.is_grabbing = false;
+              context.globals.is_returning = true;
+            }
+        });
+        
+      // Return claw and drop item coroutine
+      this.return_animation = this.coroutine( function*()
+        {
+          while (true)
+            {
+              while (!context.globals.is_returning)
+                {
+                  yield;
+                }
+              
+              //////////////////////////////////////////
+              // Returning to drop-off position x_min //
+              //////////////////////////////////////////
+              
+              var x_min = -13;
+              var x_thrust = Vec.of( 1, 0, 0 );
+              
+              while ( context.globals.claw_tf[0][3] > x_min )
+              {
+                yield;
+                var meters_per_frame = context.globals.graphics_state.animation_delta_time/50;
+                context.globals.claw_tf.post_multiply( Mat4.translation( x_thrust.times( -meters_per_frame ) ) );
+              }
+              
+              context.globals.claw_tf[0][3] = x_min;
+              
+              //////////////////////////////////////////
+              // Returning to drop-off position z_max //
+              //////////////////////////////////////////
+              
+              var z_max = 13;
+              var z_thrust = Vec.of( 0, 0, -1 );
+              
+              while ( context.globals.claw_tf[2][3] < z_max )
+              {
+                yield;
+                var meters_per_frame = context.globals.graphics_state.animation_delta_time/50;
+                context.globals.claw_tf.post_multiply( Mat4.translation( z_thrust.times( -meters_per_frame ) ) );
+              }
+              
+              context.globals.claw_tf[2][3] = z_max;
+              
+              context.globals.is_returning = false;
+            }
+        });
+    }
+    
+  make_control_panel()   // This function of a scene sets up its keyboard shortcuts.
+    { const globals = this.globals;
+      this.control_panel.innerHTML += "Gameplay controls:<br>WASD to move.<br>Space to drop the claw.<br>";
+      this.key_triggered_button( "Forward",    "w", function() { this.w_key = 1; }, undefined, function() { this.w_key = 0; } ); this.new_line();
+      this.key_triggered_button( "Left",       "a", function() { this.a_key = 1; }, undefined, function() { this.a_key = 0; } ); this.new_line();
+      this.key_triggered_button( "Back",       "s", function() { this.s_key = 1; }, undefined, function() { this.s_key = 0; } ); this.new_line();
+      this.key_triggered_button( "Right",      "d", function() { this.d_key = 1; }, undefined, function() { this.d_key = 0; } ); this.new_line();
+      
+      this.key_triggered_button( "Toggle controls", "c", function()
+                                                          {
+                                                            this.globals.movement_target_is_a_camera = !this.globals.movement_target_is_a_camera;
+                                                            this.globals.target_is_claw = !this.globals.movement_target_is_a_camera;
+                                                          }, "red" ); this.new_line();
+                                                          
+      this.key_triggered_button( "Drop claw", "enter", function()
+                                                        {
+                                                          if (!this.globals.is_grabbing)
+                                                            {
+                                                              this.globals.is_grabbing = true;
+                                                            }
+                                                        }, "red" ); this.new_line();
+                                                        
+      this.key_triggered_button( "Return claw", "r", function()
+                                                        {
+                                                          if (!this.globals.is_returning)
+                                                            {
+                                                              this.globals.is_returning = true;
+                                                            }
+                                                        }, "red" ); this.new_line();
+    }
+  
+  move_transform( meters_per_frame )
+    {
+      var min_x = -13;
+      var max_x = 13;
+      var min_z = -13;
+      var max_z = 13;
+      
+      var move_thrust = Vec.of( this.thrust[0], 0, this.thrust[2] );
+      this.claw_tf().post_multiply( Mat4.translation( move_thrust.times( -meters_per_frame ) ) );
+      
+      // Determine whether clamp is needed
+      var clamp_needed = false;
+      var clamped_target = Mat4.identity().times( this.claw_tf() );
+      
+      if ( clamped_target[0][3] > max_x)
+        {
+          clamp_needed = true;
+          clamped_target[0][3] = max_x;
+        }
+      else if ( clamped_target[0][3] < min_x )
+        {
+          clamp_needed = true;
+          clamped_target[0][3] = min_x;
+        }
+      if ( clamped_target[2][3] > max_z)
+        {
+          clamp_needed = true;
+          clamped_target[2][3] = max_z;
+        }
+      else if ( clamped_target[2][3] < min_z )
+        {
+          clamp_needed = true;
+          clamped_target[2][3] = min_z;
+        }
+      
+      // Clamp the claw_tf transform
+      if (clamp_needed)
+        { 
+          this.claw_tf().post_multiply( Mat4.inverse( this.claw_tf() ) ).post_multiply( clamped_target );
+        }
+    }
+  
+  coroutine(f)
+    {
+      var o = f(); // instantiate the coroutine
+      o.next(); // execute until the first yield
+      return function(x)
+        {
+          o.next(x);
+        }
+    }
+  
+  parse_input()
+    {
+      // Thrust
+      this.thrust = Vec.of(0,0,0);
+      if (this.w_key)
+        {
+          this.thrust[2] += 1;
+        }
+      if (this.s_key)
+        {
+          this.thrust[2] += -1;
+        }
+      if (this.a_key)
+        {
+          this.thrust[0] += 1;
+        }
+      if (this.d_key)
+        {
+          this.thrust[0] += -1;
+        }
+    }
+
+  display( graphics_state, dt = graphics_state.animation_delta_time )           // Camera code starts here.
+    {
+      if ( this.target_is_claw() )
+        {
+          this.parse_input();
+          
+          if ( this.is_grabbing() )
+            {
+              this.grab_animation( 1000 );
+            }
+          else if ( this.is_returning() )
+            {
+              this.return_animation();
+            }
+          else
+            {
+              this.move_transform( dt/50 );
+            }
+        }
+    }
+}
+    
+class My_Animation extends Scene_Component  // Code your butterfly assignment below.  It is an example of drawing a hierarchical object using a "model_transform" matrix.
+{ constructor( context )
+    { super( context );
+      var shapes = { "box" :   new Cube(),                            // Load one of each of these shape definitions onto the GPU.  Once each Shape is there we 
+                     "ball":   new Subdivision_Sphere( 4 ) };         // re-use it many times per display() call to get multiple of that shape to appear in the scene.
+      this.submit_shapes( context, shapes );
+                                                                      // Define the global camera and projection matrices.  
+                                                                      // Arguments to perspective() are field of view, aspect ratio, near plane and far plane.
+      Object.assign( context.globals.graphics_state, { camera_transform: Mat4.translation([ 0,-10,-60 ]).times( Mat4.rotation( Math.PI/12, Vec.of( 1, 0, 0 ) ) ), projection_transform: Mat4.perspective( Math.PI/4, context.width/context.height, .1, 1000 ) } );
+      
+      Object.assign( this, { hover: false, t: 0,                  // Define a couple of data members of a Butterfly_Scene.
+                             yellow: context.get_instance( Phong_Model ).material( Color.of( .8, .8, .3,  1 ), .2, 1, .7, 40 ),  // Call material() on the Phong_Shader,
+                             brown:  context.get_instance( Phong_Model ).material( Color.of( .3, .3, .1,  1 ), .2, 1,  1, 40 ),  // which returns a special-made "material" 
+                             red:    context.get_instance( Phong_Model ).material( Color.of(  1,  0,  0, .9 ), .1, .7, 1, 40 ),  // (a JavaScript object)
+                             green:  context.get_instance( Phong_Model ).material( Color.of(  0, .5,  0,  1 ), .1, .7, 1, 40 ),
+                             blue:   context.get_instance( Phong_Model ).material( Color.of(  0,  0,  1, .8 ), .1, .7, 1, 40 ),
+                             silver: context.get_instance( Phong_Model ).material( Color.of( .8, .8, .8,  1 ),  0,  1, 1, 40 ) } );
+                             
+      this.cam_tf = function() { return context.globals.graphics_state.camera_transform };
+      this.claw_tf = function() { return context.globals.claw_tf };
+      this.claw_rot_tf = function() { return context.globals.claw_rot_tf };
+      this.is_gripping = function() { return context.globals.is_gripping };
+      this.target_is_a_camera = function() { return context.globals.movement_target_is_a_camera };
+      this.is_grabbing = function() { return context.globals.is_grabbing };
+    }
+    
+  make_control_panel()                                                              // Draw the buttons, setup their actions and keyboard shortcuts, and monitor live variables.
+    {}
+
+  display( graphics_state )
+    {
+      graphics_state.lights = [ new Light( Vec.of(  30, 30,  34, 1 ), Color.of( 0, .4, 0, 1 ), 100000 ),         // Lights for Phong_Shader to use
+                                new Light( Vec.of( -10, 20, -14, 0 ), Color.of( 1, 1, .3, 1 ), 100    ) ]
+
+      // Notes:
+      // - Shapes have default radii of 1
+      // - It's safer and simpler to do scales right before drawing the object
+      // - Translating alters the origin
+      //    - Be especially aware of this when dealing with rotations with translations
+  
+      this.shapes.box.draw( graphics_state, Mat4.scale([ 15,.1,15 ]), this.green ); // Ground plane.                          
+      
+      // Useful variables that are used throughout the display() function
+      this.t = graphics_state.animation_time/1000;
+      let periodic_func = Math.sin(Math.PI * this.t);
+      let floating_motion = Mat4.translation( Vec.of( 0, 0.5 * Math.sin( Math.PI/2 * this.t ), 0 ) );
+
+      let rotate = Mat4.identity();
+
+      let model_transform = Mat4.identity();
+      
+      let claw_tf = this.claw_tf(); // Claw position based on global variable
+      
+      this.draw_claw( graphics_state, claw_tf, this.silver );
+      
+      if ( !this.target_is_a_camera() )
+        {
+          this.cam_tf().post_multiply( Mat4.inverse( this.cam_tf() ) ).post_multiply( Mat4.look_at( Vec.of( 0, 40, 70 ) , claw_tf.times( Vec.of( 0, 0, 0, 1 ) ).to3().minus( Vec.of( 0, 25, 0 ) ), Vec.of( 0, 1, 0 ) ) );
+        }
+      if ( this.is_grabbing() )
+        {
+          this.cam_tf().post_multiply( Mat4.inverse( this.cam_tf() ) ).post_multiply( Mat4.look_at( Vec.of( 40, 10, 0 ) , claw_tf.times( Vec.of( 0, 0, 0, 1 ) ).to3().minus( Vec.of( 0, 5, 0 ) ), Vec.of( 0, 1, 0 ) ) );
+        }
+    }
+  
+	draw_claw( graphics_state, model_transform, color ) 
+    {
+      let rotate_x = Mat4.identity();
+      let rotate_y = Mat4.identity();
+      let rotate_z = Mat4.identity();
+    
+      let claw_neck_tf = model_transform.times( Mat4.translation( Vec.of( 0, 0, -2 ) ) );
+      this.shapes.box.draw( graphics_state, claw_neck_tf.times( Mat4.scale( Vec.of( 0.5, 2, 0.5 ) ) ), color );
+    
+      let bearing_tf = claw_neck_tf.times( Mat4.translation( Vec.of( 0, -3, 0 ) ) );
+      this.shapes.ball.draw( graphics_state, bearing_tf, color );
+      
+      for ( let rot of [ 0, Math.PI/2, Math.PI, 3 * Math.PI/2 ] )
+        {
+          rotate_x = Mat4.rotation( Math.PI/4, Vec.of( 1, 0, 0 ) ); // Alter this to open/close claws!
+          rotate_x.post_multiply( this.claw_rot_tf() ); // Adding the claw grip animation
+            
+          rotate_y = Mat4.rotation( rot, Vec.of( 0, 1, 0 ) );
+          let claw_arm_tf = bearing_tf.times( rotate_y ).times( rotate_x ).times( Mat4.translation( Vec.of( 0, 0, 3 ) ) );
+          
+          this.draw_claw_arm( graphics_state, claw_arm_tf, color );
+        }
+    }
+	
+  draw_claw_arm( graphics_state, model_transform, color )
+    {
+      let rotate_x = Mat4.identity();
+      let rotate_y = Mat4.identity();
+      let rotate_z = Mat4.identity();
+    
+      let claw_arm_tf = model_transform;
+      this.shapes.box.draw( graphics_state, claw_arm_tf.times( Mat4.scale( Vec.of( 0.5, 0.5, 2 ) ) ), color );
+      
+      rotate_x = Mat4.translation( Vec.of( 0, -0.5, -2 ) ).times( Mat4.rotation( Math.PI/4, Vec.of( 1, 0, 0 ) ) ).times( Mat4.translation( Vec.of( 0, 0.5, 2 ) ) ); // Alter this to open/close claws
+      let claw_forearm_tf = claw_arm_tf.times( Mat4.translation( Vec.of( 0, 0, 4 ) ) )
+      this.shapes.box.draw( graphics_state, claw_forearm_tf.times( rotate_x ).times( Mat4.scale( Vec.of( 0.5, 0.5, 2 ) ) ), color );
+    }
+}
+</script>
+<style>
+  table { border-collapse: collapse; display:block; overflow-x: auto; }
+  table, th, td { border: 2px solid black; vertical-align: top; white-space: nowrap }
+  th, td { overflow: hidden;  }
+  button { position: relative; background-color: #4C9F50; color: white; padding: 6px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); transition: background-color .3s, transform .3s }
+  button:hover, button:focus { transform: scale(1.2); color:gold }
+  .dropdown { display:inline-block }
+  .dropdown-content { display: none; position: absolute; background-color: #f9f9f9; min-width: 100px; overflow: auto; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2) }
+  .dropdown-content a { color: black; padding: 4px 4px; display: block }
+  .dropdown a:hover { background-color: #f1f1f1 }
+  .show { display:inline-block }
+</style>
+</head><body>
+<div id="explanation_section"></div>
+<div id="canvases"></div>
+<table id="control_buttons" class="dropdown" style="display:block; width: 70%;  border: 0px; margin: 0 0 50px 0"><tr></tr></table>
+<div id="code_panel" style="font-family: monospace; white-space: pre; margin: 50px 0" >
+  <div id="code_display"  data-displayed="" ></div>
+  <button id="edit_button" style="display:none">Start editing</button> 
+  <table id="class_list" class="dropdown" style="display:block; border: 0px; border-spacing: 10px " >
+    <tr><td colspan="2">Click below to navigate through all classes that are defined. <br>&nbsp;<br>Main demo: <span name="main_demo_link"></span></td></tr>
+    <tr style="text-align:center"><td>tinywebgl-ucla.js</td><td>dependencies.js</td></tr><tr></tr></table>
+</div>
+<form name="new_demo_source_code" style="display:none">  
+  <p style="margin: 50px 0"><i><b>What can I put here?</b></i>  A JavaScript class, with any valid JavaScript inside.  Your code can use classes from this demo, or from ANY demo on the 
+  encyclopedia of code --  the dependencies will automatically be pulled in to run your demo!<br></p>
+  <textarea rows="30" cols="140" name="new_demo_code"></textarea><br>
+  <div id="submit_result" style="margin: 10px 0"></div>
+  <button type="submit" style="margin: 0px 50px 0px 0px">Save as new webpage</button> 
+  <input type="text" name="author"   placeholder="Author name">
+  <input type="text" name="password" placeholder="Password" style="display:none">
+  <span id="overwrite_panel" style="display:none"><label>Overwrite?<input type="checkbox" name="overwrite" autocomplete="off"></label></span>
+  <span id="beginner_panel"><label>Beginner Mode<input type="checkbox" checked onchange="document.querySelector('#expert_panel').style.display='block'; beginner_panel.style.display='none'"></label></span>
+  <div id="expert_panel" style="display:none;"><label><input type="checkbox" name="finished" autocomplete="off">
+    Optional:  This demo is finished; consider it for public listing on the main page.  
+    I believe that this demo is the one true way to minimalistically do what its name says.
+    The code's readability and structure are so good as to maximize how easy it is to memorize it.
+    </label></div>  
+</form>
+</body></html>
