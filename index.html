@@ -30,7 +30,7 @@
         { if( document.getElementsByName( "finished" )[0].checked )
             alert( "Your demo will be submitted.  If approved, you will start being asked for a password to make any further updates to it.  This password "
                  + "will appear right now, below the submit button, and then (assuming submission worked) it will never appear again.  Write it down." );
-          var xhr = new XMLHttpRequest();
+          let xhr = new XMLHttpRequest();
           xhr.open("POST", "/submit-demo?Unapproved", true);
           xhr.responseType = "json";
           xhr.onload = function(event) 
@@ -47,42 +47,11 @@
         }, false);      
     }
 
-class Text_Line extends Shape  // Draws a horizontal arrangment of quads textured over with images of ASCII characters, spelling out a string.
-{ constructor( max_size )
-    { super();
-      this.max_size = max_size;
-      var object_transform = Mat4.identity();
-      for( var i = 0; i < max_size; i++ )
-      { Square.prototype.insert_transformed_copy_into( this, [], object_transform );      // Each quad is a separate square object.
-        object_transform.post_multiply( Mat4.translation([ 1.5,0,0 ]) );
-      }
-    }
-  set_string( line, gl = this.gl )        // Overwrite the texture coordinates buffer with new values per quad that enclose each of the string's characters.
-    { this.texture_coords = [];
-      for( var i = 0; i < this.max_size; i++ )
-        {
-          var row = Math.floor( ( i < line.length ? line.charCodeAt( i ) : ' '.charCodeAt() ) / 16 ),
-              col = Math.floor( ( i < line.length ? line.charCodeAt( i ) : ' '.charCodeAt() ) % 16 );
-
-          var skip = 3, size = 32, sizefloor = size - skip;
-          var dim = size * 16,  left  = (col * size + skip) / dim,      top    = (row * size + skip) / dim,
-                                right = (col * size + sizefloor) / dim, bottom = (row * size + sizefloor + 5) / dim;
-
-          this.texture_coords.push( ...Vec.cast( [ left,  1-bottom], [ right, 1-bottom ], [ left,  1-top ], [ right, 1-top ] ) );
-        }
-      gl.bindBuffer( gl.ARRAY_BUFFER, this.graphics_card_buffers[2] );
-      gl.bufferData( gl.ARRAY_BUFFER, Mat.flatten_2D_to_1D( this.texture_coords ), gl.STATIC_DRAW );
-    }
-}
-    
 class Animation_Manager extends Scene_Component
 {
   constructor( context, canvas = context.canvas )
     {
       super( context );
-      
-      Object.assign( this, { grey: context.get_instance( Phong_Model ).material( Color.of( 1,1,1,1 ), 0, .3, .5, 10 ),
-                       text_image: context.get_instance( Phong_Model ).material( Color.of( 0,0,0,1 ), 1, 0, 0, 1, context.get_instance( "/assets/text.png" ) ) } );
       
       // Whether the target of the controls is the claw
       this.target_is_claw = function() { return context.globals.target_is_claw }
@@ -131,6 +100,16 @@ class Animation_Manager extends Scene_Component
       this.set_prize_tf = function( new_prize_tf ) { context.globals.prize_tf = new_prize_tf };
       context.globals.prize_tf = Mat4.identity();
       
+      // Picked up item transform
+      this.get_pickup_tf = function() { return context.globals.pickup_tf };
+      this.set_pickup_tf = function( new_pickup_tf ) { context.globals.pickup_tf = new_pickup_tf };
+      context.globals.pickup_tf = Mat4.identity();
+      
+      // Claw actual velocity
+      this.get_claw_velocity = function() { return context.globals.claw_velocity };
+      this.set_claw_velocity = function( new_vel ) { context.globals.claw_velocity = new_vel };
+      context.globals.claw_velocity = Vec.of( 0, 0, 0 );
+      
       // Drop claw coroutine
       this.grab_animation = this.coroutine( function*()
         {
@@ -156,12 +135,24 @@ class Animation_Manager extends Scene_Component
               while ( duration_time < total_time )
                 {
                   yield;
-                  context.globals.claw_tf = raised_pos.times( Mat4.translation( Vec.of( 0, -1 * drop_height * ( duration_time/total_time ), 0 ) ) );
+                  context.globals.claw_tf = raised_pos.times( Mat4.translation( Vec.of( 0, -1 * drop_height * ( duration_time/total_time ), 0 ) ) ).times( Mat4.rotation( 0.05 * Math.sin( 2*Math.PI * duration_time/total_time ), Vec.of( 0, 1, 0 ) ) );
                   duration_time = context.globals.graphics_state.animation_time - start_time;
+                  context.globals.claw_velocity = Vec.of( 0, -1, 0 );
                 }
               
               // Making the claw exactly in dropped position
               context.globals.claw_tf = lowered_pos;
+              
+              // Time delay for suspense for the release
+							total_time = 200;
+              start_time = context.globals.graphics_state.animation_time;
+              duration_time = context.globals.graphics_state.animation_time - start_time;
+							
+							while ( duration_time < total_time )
+							{
+								yield;
+								duration_time = context.globals.graphics_state.animation_time - start_time;
+							}
               
               ///////////////////////////////////
               // Switch to grip_claw_animation //
@@ -186,14 +177,26 @@ class Animation_Manager extends Scene_Component
                   yield;
                   context.globals.claw_tf = lowered_pos.times( Mat4.translation( Vec.of( 0, drop_height * ( duration_time/total_time ), 0 ) ) );
                   duration_time = context.globals.graphics_state.animation_time - start_time;
+                  context.globals.claw_velocity = Vec.of( 0, 1, 0 );
                 }
               
               // Making the claw exactly in raised position
               context.globals.claw_tf = raised_pos;
 							
+              // Time delay for suspense for the release
+							total_time = 200;
+              start_time = context.globals.graphics_state.animation_time;
+              duration_time = context.globals.graphics_state.animation_time - start_time;
+							
+							while ( duration_time < total_time )
+							{
+								yield;
+								duration_time = context.globals.graphics_state.animation_time - start_time;
+							}
+              
 							// STOP GRAB ANIMATION, START RETURN ANIMATION
-              context.globals.is_grabbing = false;
               context.globals.is_returning = true;
+              context.globals.is_grabbing = false;
             }
         });
         
@@ -211,14 +214,15 @@ class Animation_Manager extends Scene_Component
               // Returning to drop-off position x_min //
               //////////////////////////////////////////
               
-              var x_min = -10;
-              var x_thrust = Vec.of( 1, 0, 0 );
+              let x_min = -10;
+              let x_thrust = Vec.of( 1, 0, 0 );
               
               while ( context.globals.claw_tf[0][3] > x_min )
               {
                 yield;
-                var meters_per_frame = context.globals.graphics_state.animation_delta_time/50;
+                let meters_per_frame = context.globals.graphics_state.animation_delta_time/50;
                 context.globals.claw_tf.post_multiply( Mat4.translation( x_thrust.times( -meters_per_frame ) ) );
+                context.globals.claw_velocity = x_thrust;
               }
               
               context.globals.claw_tf[0][3] = x_min;
@@ -227,14 +231,15 @@ class Animation_Manager extends Scene_Component
               // Returning to drop-off position z_max //
               //////////////////////////////////////////
               
-              var z_max = 10;
-              var z_thrust = Vec.of( 0, 0, -1 );
+              let z_max = 10;
+              let z_thrust = Vec.of( 0, 0, -1 );
               
               while ( context.globals.claw_tf[2][3] < z_max )
               {
                 yield;
-                var meters_per_frame = context.globals.graphics_state.animation_delta_time/50;
+                let meters_per_frame = context.globals.graphics_state.animation_delta_time/50;
                 context.globals.claw_tf.post_multiply( Mat4.translation( z_thrust.times( -meters_per_frame ) ) );
+                context.globals.claw_velocity = z_thrust;
               }
               
               context.globals.claw_tf[2][3] = z_max;
@@ -287,12 +292,28 @@ class Animation_Manager extends Scene_Component
               start_time = context.globals.graphics_state.animation_time;
               duration_time = context.globals.graphics_state.animation_time - start_time;
               
+              //cip
+              <!-- let orig_pickup_tf = context.globals.pickup_tf; -->
+              <!-- let end_pickup_tf = context.globals.prize_tf; -->
+              
+              <!-- let orig_pickup_pos = orig_pickup_tf.times( Vec.of( 0, 0, 0, 1 ) ); -->
+              <!-- let end_pickup_pos = end_pickup_tf.times( Vec.of( 0, 0, 0, 1 ) ); -->
+              <!-- let orig_to_end_vec = orig_pickup_pos.minus( end_pickup_pos ).to3(); -->
+              <!-- console.log(orig_pickup_pos) -->
+              <!-- console.log(end_pickup_tf) -->
+              <!-- console.log(orig_to_end_vec) -->
+              
 							let grip_amplitude = Math.PI/12;
 							
               while ( duration_time < total_time )
                 {
                   yield;
                   context.globals.claw_rot_tf = Mat4.rotation( grip_amplitude * ( Math.sin( Math.PI/2 * duration_time/total_time ) ), Vec.of( 1, 0, 0 ) );
+                 
+                  //cip
+                  <!-- // interp pickup_item_tf to prize_tf -->
+                  <!-- context.globals.pickup_tf = orig_pickup_tf.times( Mat4.translation( orig_to_end_vec.times( duration_time/total_time ) ) ); -->
+                  
                   duration_time = context.globals.graphics_state.animation_time - start_time;
                 }
               
@@ -407,7 +428,7 @@ class Animation_Manager extends Scene_Component
   
   coroutine(f)
     {
-      var o = f(); // instantiate the coroutine
+      let o = f(); // instantiate the coroutine
       o.next(); // execute until the first yield
       return function(x)
         {
@@ -420,7 +441,7 @@ class Animation_Manager extends Scene_Component
       if ( this.target_is_claw() )
         {
           // Default cam
-          this.set_cam_tf( Mat4.look_at( Vec.of( 0, 40, 70 ) , this.get_claw_tf().times( Vec.of( 0, 0, 0, 1 ) ).to3().minus( Vec.of( 0, 25, 0 ) ), Vec.of( 0, 1, 0 ) ) );
+          this.set_cam_tf( Mat4.look_at( Vec.of( 0, 40, 70 ), this.get_claw_tf().times( Vec.of( 0, 0, 0, 1 ) ).to3().minus( Vec.of( 0, 25, 0 ) ), Vec.of( 0, 1, 0 ) ) );
         
           if ( this.is_grabbing() )
             {
@@ -432,7 +453,7 @@ class Animation_Manager extends Scene_Component
                 }
               
               // Follow claw close-up
-              this.set_cam_tf( Mat4.look_at( Vec.of( 0, 10, 40 ) , this.get_claw_tf().times( Vec.of( 0, 0, 0, 1 ) ).to3().minus( Vec.of( 0, 5, 0 ) ), Vec.of( 0, 1, 0 ) ) );
+              this.set_cam_tf( Mat4.look_at( Vec.of( 0, 10, 40 ), this.get_claw_tf().times( Vec.of( 0, 0, 0, 1 ) ).to3().minus( Vec.of( 0, 5, 0 ) ), Vec.of( 0, 1, 0 ) ) );
             }
           
           if ( this.is_returning() )
@@ -452,12 +473,17 @@ class Animation_Manager extends Scene_Component
                   this.drop_prize_animation();
                   
                   // Watch prize drop close up
-                  this.set_cam_tf( Mat4.look_at( Vec.of( -13, -10, 30 ) , this.get_prize_tf().times( Vec.of( 0, 0, 0, 1 ) ).to3(), Vec.of( 0, 1, 0 ) ) );
+                  this.set_cam_tf( Mat4.look_at( Vec.of( -13, -10, 30 ), this.get_prize_tf().times( Vec.of( 0, 0, 0, 1 ) ).to3(), Vec.of( 0, 1, 0 ) ) );
                 }
               else
                 {
                   this.set_prize_tf( this.get_claw_tf().times( Mat4.translation( Vec.of( 0, -5, 0 ) ) ) )
                 }
+                
+              if ( !this.is_grabbing() )
+              {
+                this.set_pickup_tf( this.get_prize_tf() );
+              }
             }
         }
     }
@@ -507,6 +533,11 @@ class Gameplay_Controls extends Scene_Component
       context.globals.button_pressed = false;
       this.get_button_pressed = function() { return context.globals.button_pressed };
       this.set_button_pressed = function( new_button_pressed ) { context.globals.button_pressed = new_button_pressed };
+      
+      // Claw actual velocity
+      this.get_claw_velocity = function() { return context.globals.claw_velocity };
+      this.set_claw_velocity = function( new_vel ) { context.globals.claw_velocity = new_vel };
+      context.globals.claw_velocity = Vec.of( 0, 0, 0 );
     }
     
   make_control_panel()   // This function of a scene sets up its keyboard shortcuts.
@@ -528,36 +559,42 @@ class Gameplay_Controls extends Scene_Component
   
   move_transform( meters_per_frame )
     {
-      var min_x = -10;
-      var max_x = 10;
-      var min_z = -10;
-      var max_z = 10;
+      let min_x = -10;
+      let max_x = 10;
+      let min_z = -10;
+      let max_z = 10;
       
-      var move_thrust = Vec.of( this.thrust[0], 0, this.thrust[2] );
+      let move_thrust = Vec.of( this.thrust[0], 0, this.thrust[2] );
       this.get_claw_tf().post_multiply( Mat4.translation( move_thrust.times( -meters_per_frame ) ) );
       
       // Determine whether clamp is needed
-      var clamp_needed = false;
-      var clamped_target = Mat4.identity().times( this.get_claw_tf() );
+      let clamp_needed = false;
+      let clamped_x = false;
+      let clamped_z = false;
+      let clamped_target = Mat4.identity().times( this.get_claw_tf() );
       
       if ( clamped_target[0][3] > max_x)
         {
           clamp_needed = true;
+          move_thrust[0] = 0;
           clamped_target[0][3] = max_x;
         }
       else if ( clamped_target[0][3] < min_x )
         {
           clamp_needed = true;
+          move_thrust[0] = 0;
           clamped_target[0][3] = min_x;
         }
       if ( clamped_target[2][3] > max_z)
         {
           clamp_needed = true;
+          move_thrust[3] = 0;
           clamped_target[2][3] = max_z;
         }
       else if ( clamped_target[2][3] < min_z )
         {
           clamp_needed = true;
+          move_thrust[3] = 0;
           clamped_target[2][3] = min_z;
         }
       
@@ -566,6 +603,8 @@ class Gameplay_Controls extends Scene_Component
         {
           this.set_claw_tf( clamped_target );
         }
+      
+      this.set_claw_velocity( move_thrust );
     }
   
   parse_input()
@@ -630,7 +669,7 @@ class Gameplay_Controls extends Scene_Component
 class My_Animation extends Scene_Component  // Code your butterfly assignment below.  It is an example of drawing a hierarchical object using a "model_transform" matrix.
 { constructor( context )
     { super( context );
-      var shapes = { "box" :   new Cube(),                            // Load one of each of these shape definitions onto the GPU.  Once each Shape is there we 
+      let shapes = { "box" :   new Cube(),                            // Load one of each of these shape definitions onto the GPU.  Once each Shape is there we 
                      "ball":   new Subdivision_Sphere( 4 ),           // re-use it many times per display() call to get multiple of that shape to appear in the scene.
                      "teapot": new Shape_From_File( "/assets/teapot.obj" ),
                      "claw_arm": new Shape_From_File( "/assets/claw_arm.obj" ),
@@ -639,7 +678,12 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
                      "joystick": new Shape_From_File( "/assets/joystick.obj" ),
                      "button": new Shape_From_File( "/assets/button.obj" ),
                      "square_pyramid": new Square_Pyramid(),
-                     "diamond": new Diamond()
+                     "diamond": new Diamond(),
+                     "capped_cylinder": new Capped_Cylinder ( 4, 50, [[0,1],[0,1]] ),
+                     "donut" : new Torus ( 15, 15 ),
+                     "tiled_square_50": new Tiled_Square( 50, 50 ),
+                     "tiled_square_17": new Tiled_Square( 17, 17 ),
+                     "square": new Square()
                      };
                      
       this.submit_shapes( context, shapes );
@@ -647,20 +691,27 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
                                                                       // Arguments to perspective() are field of view, aspect ratio, near plane and far plane.
       Object.assign( context.globals.graphics_state, { camera_transform: Mat4.translation([ 0,-10,-60 ]).times( Mat4.rotation( Math.PI/12, Vec.of( 1, 0, 0 ) ) ), projection_transform: Mat4.perspective( Math.PI/4, context.width/context.height, .1, 1000 ) } );
       
+      Object.assign( this, { text_image: context.get_instance( Phong_Model ).material( Color.of( 0,0,0,1 ), 1, 0, 0, 1, context.get_instance( "/assets/text.png" ) ) } );
+                       
       Object.assign( this, { hover: false, t: 0, fps: 0,
                              yellow: context.get_instance( Phong_Model ).material( Color.of( .8, .8, .3,  1 ), .2, 1, .7, 40 ),  // Call material() on the Phong_Shader,
                              brown:  context.get_instance( Phong_Model ).material( Color.of( .3, .3, .1,  1 ), .2, 1,  1, 40 ),  // which returns a special-made "material" 
                              red:    context.get_instance( Phong_Model ).material( Color.of(  1,  0,  0, .9 ), .1, .7, 1, 40 ),  // (a JavaScript object)
                              green:  context.get_instance( Phong_Model ).material( Color.of(  0, .5,  0,  1 ), .1, .7, 1, 40 ),
                              blue:   context.get_instance( Phong_Model ).material( Color.of(  0,  0,  1, .8 ), .1, .7, 1, 40 ),
-                             silver: context.get_instance( Phong_Model ).material( Color.of( .8, .8, .8,  1 ),  0,  1, 1, 40 ),
-                             claw_color: context.get_instance( Phong_Model ).material( Color.of( .4, .4, .4,  1 ),  .1,  1, 1, 40 ),
+                             silver: context.get_instance( Phong_Model ).material( Color.of( .5, .5, .5,  1 ),  .5,  1, 1, 40 ),
+                             dark_silver: context.get_instance( Phong_Model ).material( Color.of( .5, .5, .5,  1 ),  .3, .3, .3, 40 ),
                              window_color: context.get_instance( Phong_Model ).material( Color.of( .7, .7, .7,  .05 ),  .1,  .1, .1, 40 ),
                              joystick_color: context.get_instance( Phong_Model ).material( Color.of( 1, 1, 1,  1 ),  .1,  .1, .1, 40 ),
                              button_color: context.get_instance( Phong_Model ).material( Color.of( .8, .1, .1,  1 ),  .8,  .8, 1, 40 ),
                              button_color_flash: context.get_instance( Phong_Model ).material( Color.of( 1, 0, 0,  1 ),  1,  1, 1, 40 ),
                              purple: context.get_instance( Phong_Model ).material( Color.of(  60/255,  30/255,  130/255, 1 ), 0, 1, 1, 40 ),
-                             diamond: context.get_instance( Phong_Model ).material( Color.of( .5 , .5, .5, 1 ), .8, .2, .5, 40, context.get_instance( "assets/diamond.png" ) )
+                             diamond: context.get_instance( Phong_Model ).material( Color.of( .5 , .5, .5, 1 ), .8, .2, .5, 40, context.get_instance( "assets/diamond.png" ) ),
+                             black: context.get_instance( Phong_Model ).material( Color.of( 0, 0, 0, 1 ), .1, .7, 1, 40 ),
+                             arcade_carpet: context.get_instance( Phong_Model ).material( Color.of( 0, 0, 0, 1 ), .4, 0, 0, 40, context.get_instance( "assets/arcade_carpet.jpg" ) ),
+                             terry_crews: context.get_instance( Phong_Model ).material( Color.of( 0, 0, 0, 1 ), .8, 0, 0, 40, context.get_instance( "assets/terry_crews.jpg" ) ),
+                             brick: context.get_instance( Phong_Model ).material( Color.of( 0, 0, 0, 1 ), .06, 0, 0, 40, context.get_instance( "assets/brick.jpg" ) ),
+                             gradient_bw: context.get_instance( Phong_Model ).material( Color.of( .4, .4, .4, 1 ), .7, 0, 0, 40, context.get_instance( "assets/gradient_bw.png" ) )
                            });
                              
       // Whether the target of the controls is the claw
@@ -697,6 +748,10 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       this.get_prize_tf = function() { return context.globals.prize_tf };
       this.set_prize_tf = function( new_prize_tf ) { context.globals.prize_tf = new_prize_tf };
       
+      // Picked up item transform
+      this.get_pickup_tf = function() { return context.globals.pickup_tf };
+      this.set_pickup_tf = function( new_pickup_tf ) { context.globals.pickup_tf = new_pickup_tf };
+      
       // Flag: target is camera
       this.target_is_a_camera = function() { return context.globals.movement_target_is_a_camera };
       
@@ -720,8 +775,11 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       this.set_prize_tf = function( new_prize_tf ) { context.globals.prize_tf = new_prize_tf };
       
       // Item array
-      this.items_tfs = new Array(2);
-      this.items_models = new Array(2);
+      this.items_tfs = new Array(2).fill( Mat4.identity() );
+      this.items_models = [
+          this.shapes.teapot,
+          this.shapes.diamond
+        ];
       this.items_won = function() { return context.globals.items_won };
       context.globals.items_won = new Array(2).fill(false);
       
@@ -730,7 +788,16 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       this.get_button_pressed = function() { return context.globals.button_pressed };
       this.set_button_pressed = function( new_button_pressed ) { context.globals.button_pressed = new_button_pressed };
       
+      // Claw actual velocity
+      this.get_claw_velocity = function() { return context.globals.claw_velocity };
+      this.set_claw_velocity = function( new_vel ) { context.globals.claw_velocity = new_vel };
       
+      ///////////////////////////////////////
+      ///////////////// tts /////////////////
+      ///////////////////////////////////////
+      Object.assign( this, { orange: context.get_instance( Phong_Model ).material( Color.of( .8,.4,0,1 ), .3, .8, .8, 40, context.get_instance( "/assets/rgb.jpg" ) ), globals: context.globals,
+                     nodes: [], segments: [], time_accumulator: 0, time_scale: 1/2000, t: 0, dt: 1/500, N: 40  } );            // Define the step size for time, and the amount of
+      this.reset();
       
     }
     
@@ -743,15 +810,10 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
     {
       this.fps = Math.round( 1/graphics_state.animation_delta_time * 1000 );
       
-      graphics_state.lights = [ new Light( Vec.of(  30, 100,  34, 1 ), Color.of( 0, .4, 0, 1 ), 100000 ),         // Lights for Phong_Shader to use
-                                new Light( Vec.of( 10, 10, 20, 1 ), Color.of( 60/255, 30/255, 120/225, 1 ), 1000    )]
-
-      // Notes:
-      // - Shapes have default radii of 1
-      // - It's safer and simpler to do scales right before drawing the object
-      // - Translating alters the origin
-      //    - Be especially aware of this when dealing with rotations with translations
-                          
+      graphics_state.lights = [ new Light( Vec.of(  30, 80,  34, 1 ), Color.of( 60/255, 30/255, 120/255, 1 ), 20000 ), // point purple from top
+                                new Light( Vec.of(  30, -100,  34, 1 ), Color.of( 151/255, 255/255, 255/255, 1 ), 5000 ), // point teal from bottom
+                                new Light( Vec.of( 100, 50, 150, 1 ), Color.of( 60/255, 30/255, 120/255, 1 ), 10000 ), // point purple from front
+                              ]
       
       // Useful variables that are used throughout the display() function
       let rotate_x = Mat4.identity();
@@ -763,14 +825,23 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       // Start drawing the scene
       let model_transform = Mat4.identity();
       
-      // Floor
-			let floor_tf = model_transform;
+			let origin_tf = model_transform;
       
+      // Floor
+      let floor_tf = origin_tf.times( Mat4.translation( Vec.of( 0, -31, 0 ) ) );
+      scale = Mat4.scale( Vec.of( 500, 500, 500 ) );
+      rotate = Mat4.rotation( Math.PI/2, Vec.of( 1, 0, 0 ) );
+      this.shapes.tiled_square_50.draw( graphics_state, floor_tf.times( rotate ).times( scale ), this.arcade_carpet );
+      
+      // Wall
+      let wall_tf = floor_tf.times( Mat4.translation( Vec.of( 0, 51.8, -20 ) ) );
+      scale = Mat4.scale( Vec.of( 500, 500, 500 ) );
+      this.shapes.tiled_square_17.draw( graphics_state, wall_tf.times( scale ), this.brick );
+
       // Claw machine
-      let claw_machine_tf = floor_tf.times( Mat4.translation( Vec.of( -1, 16, 4.5 ) ) ).times( Mat4.rotation( Math.PI * -1/2, Vec.of( 0, 1, 0 ) ) );
+      let claw_machine_tf = origin_tf.times( Mat4.translation( Vec.of( -1, 16, 4 ) ) ).times( Mat4.rotation( Math.PI * -1/2, Vec.of( 0, 1, 0 ) ) );
       let claw_machine_scale = 35;
       scale = Mat4.scale( Vec.of( claw_machine_scale, claw_machine_scale, claw_machine_scale ) );
-      //this.shapes.box.draw( graphics_state, floor_tf.times( Mat4.scale( Vec.of( 15, 0.1, 15 ) ) ), this.green );
       this.shapes.claw_machine.draw( graphics_state, claw_machine_tf.times( scale ), this.purple );
       
       // Claw machine's windows
@@ -779,7 +850,7 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       let claw_machine_center_tf = claw_machine_tf.times( Mat4.translation( Vec.of( -4.5, 4.7, -.7 ) ) );
       
       for ( let rot of [ 0, Math.PI * 1/2, Math.PI * 1] )
-        {   
+        {
           rotate_y = Mat4.rotation( rot, Vec.of( 0, 1, 0 ) );
           let window_tf = claw_machine_center_tf.times( rotate_y ).times( Mat4.translation( Vec.of( 0, 0, -1 * window_scale * 18/30 ) ) );
           
@@ -826,38 +897,53 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
         }
       
       // Potential prizes
-      let items_tf = new Array(2);
-      let item_models = [
-          this.shapes.teapot,
-          this.shapes.diamond
-        ];
       
-      for ( let i = 0; i < items_tf.length; i++ )
+      for ( let i = 0; i < this.items_tfs.length; i++ )
         {
-          items_tf[i] = floor_tf.times( Mat4.translation( Vec.of( 3*i, 2.1, 3*i ) ) );
+          this.items_tfs[i] = origin_tf.times( Mat4.translation( Vec.of( 3*i, 2.1, 3*i ) ) );
         }
       
       if ( this.get_item_picked_up() )
         {
-          items_tf[ this.get_item_num() ] = this.get_prize_tf();
+          this.items_tfs[ this.get_item_num() ] = this.get_prize_tf();
+          //cip
+          //this.items_tfs[ this.get_item_num() ] = this.get_pickup_tf();
         }
       
-      for (let i = 0; i < items_tf.length; i++)
+      //console.log( this.get_pickup_tf().times( Vec.of( 0, 0, 0, 1 ) ) );
+      
+      for (let i = 0; i < this.items_tfs.length; i++)
         {
-          // If item won, place it in the "graveyard" at y = -100
+          // If item won, place it in the "graveyard" at -100
           if ( this.items_won()[i] )
             {
-              items_tf[i] = floor_tf.times( Mat4.translation( Vec.of( 0, -100, 0 ) ) );
+              this.items_tfs[i] = origin_tf.times( Mat4.translation( Vec.of( -100, -100, -100 ) ) );
             }
           else // Draw item if not won
             {
-              item_models[i].draw( graphics_state, items_tf[i].times( Mat4.scale( Vec.of( 2, 2, 2 ) ) ), this.diamond );
+              this.items_models[i].draw( graphics_state, this.items_tfs[i].times( Mat4.scale( Vec.of( 2, 2, 2 ) ) ), this.diamond );
             }
         }
         
-      // Claw position based on global variable
+      // Claw
       let claw_tf = this.get_claw_tf();
-      this.draw_claw( graphics_state, claw_tf, this.claw_color );
+      this.draw_claw( graphics_state, claw_tf, this.silver );
+      
+      // Claw's support bars
+      let support_bar_h = 41  ;
+      
+      let support_bar_tf_z = Mat4.translation( Vec.of( 0, support_bar_h, 0 ) );
+      support_bar_tf_z[2][3] = claw_tf[2][3];
+      this.shapes.box.draw( graphics_state, support_bar_tf_z.times( Mat4.scale( Vec.of( 16, 1, 1 ) ) ), this.dark_silver );
+      
+      let support_bar_tf_x = Mat4.translation( Vec.of( 0, support_bar_h, 0 ) );
+      support_bar_tf_x[0][3] = claw_tf[0][3];
+      this.shapes.box.draw( graphics_state, support_bar_tf_x.times( Mat4.scale( Vec.of( 1, 1, 16 ) ) ), this.dark_silver );
+      
+      let support_bar_bearing = Mat4.translation( Vec.of( 0, support_bar_h, 0 ) );
+      support_bar_bearing[2][3] = claw_tf[2][3];
+      support_bar_bearing[0][3] = claw_tf[0][3];
+      this.shapes.ball.draw( graphics_state, support_bar_bearing.times( Mat4.scale( Vec.of( 2.5, 2.5, 2.5 ) ) ), this.dark_silver );
       
       if ( this.is_gripping_claw() )
         {
@@ -866,44 +952,127 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
           //this.shapes.ball.draw( graphics_state, claw_hitbox_tf.times( Mat4.scale( Vec.of( 1, 1, 1 ) ) ), this.transparent );
           let hit_radius = 2;
           
-          for (let i = 0; i < items_tf.length; i++)
+          
+          this.set_item_picked_up(false);
+          for (let i = 0; i < this.items_tfs.length; i++)
             {
-              let dist_vec = items_tf[i].times( Vec.of( 0, 0, 0, 1 ) ).minus( claw_hitbox_tf.times( Vec.of( 0, 0, 0, 1 ) ) ).to3();
+              let dist_vec = this.items_tfs[i].times( Vec.of( 0, 0, 0, 1 ) ).minus( claw_hitbox_tf.times( Vec.of( 0, 0, 0, 1 ) ) ).to3();
               dist_vec[1] = 0;
               let dist_to_toy = Math.sqrt( dist_vec.dot( dist_vec ) );
               
               if ( dist_to_toy < 2 )
                 {
+                  <!-- //cip -->
+                  <!-- if ( this.get_item_num != i ) -->
+                    <!-- { -->
+                      <!-- this.set_pickup_tf( this.items_tfs[i] ) -->
+                      <!-- console.log( this.get_pickup_tf() ) -->
+                    <!-- } -->
+                
                   this.set_item_picked_up(true);
                   this.set_item_num(i);
                   break;
-                }
-              else
-                {
-                  this.set_item_picked_up(false);
                 }
             }
         }
       
       // TODO:
-      //    design new polygonal object by extending Shape class
-      //      - assign texture image/mapping
-      //      - use as pickup-able item
-      //    make claw neck using string physics
-      //      - get string physics from garrett's "encyclopedia"
-      //      - possibly change parameters of string based on animation scene
+      //    make better texture mapping for diamond shape?
+      
       //    add music
       //      - stranger things/retro/8-bit type of music?
+      //    add "distance" text to get player feedback to how close they were to the item
+      //      - for dist between 2 and 4, output text above items transform
       //    construct rest of scene (other arcade machines, lighting, cheesy carpet,...)
-      //      - arcade machines (very small width + tranparent -> looks like tv screen)\
+      //      - arcade machines (very small width + tranparent -> looks like tv screen)
       //      - lighting (figure this out lol)
-      //      - cheesy carpet (find a texture online or something)
+      //    add smoother "capture" animation
+      //      - interpolate between prize_tf and a "pickup_tf"
       //    smoother camera animations
       //      - interpolate camera parameters (P_eye/P_ref)
       //      - do it in coroutine?
       //    make movie?
       
+      // TTS
+      if( this.globals.animate ) this.simulate( graphics_state.animation_delta_time );                 // Advance the time and state of our whole simulation.
+      this.blend_state();
+      
+      let previous_point;                                                                              // Begin drawing the spring.
+      for( let n of this.nodes )
+      { let target = previous_point;                                                                   // When drawing, point each segment at the previous one using look_at().
+        if( !previous_point || previous_point.equals( n.drawn_position ) ) target = Vec.of( 0,10,0 );
+    
+        let matrix = Mat4.inverse( Mat4.look_at( n.drawn_position, target, Vec.of( 0,0,1 ) ) );        // Remember to invert the result of look_at() since it is originally for cameras. 
+        previous_point = Vec.of( ...n.drawn_position );        
+        this.shapes.donut.draw( graphics_state, claw_tf.times( Mat4.translation( Vec.of( 1.2, -1, 0 ) ) ).times( matrix ).times( Mat4.scale( [ .3, .3, .3 ] ) ), this.black );       // Draw the spring segment.
+      }
     }
+    
+  reset()       // Define a data structure for the spring, organizing some data the reside at the nodes (0D points) and some at the springs (1D line segments).
+    { for( let i = 0; i < this.N;   i++ ) this.nodes[i] = { neighbors: [ i > 0 && i-1, i < this.N-1 && i ], previous_pos: Vec.of( 0,0,0 ), velocity: Vec.of( 0,0,0 ) };   // Define nodes.
+      //this.nodes.forEach( (n,i,a) => n.position = Mat4.rotation( 2*Math.PI*i/a.length, Vec.of( 0,1,0 ) ).times( Vec.of( -1,2,0,1 ) ).to3() );    // Initial position of nodes: a circle.
+      //this.nodes.forEach( (n,i,a) => n.position = Vec.of( i, 0.2 * i, 0 ) );
+      this.nodes.forEach( (n, i, a) => n.position = Vec.of( i*0.1, Math.pow( i*0.1 + 1, 2 ) * 1.2, 0 ) );
+      
+      for( let i = 0; i < this.N-1; i++ ) this.segments[i] = { endpoints: [ i, i+1 ], dS: this.nodes[i+1].position.minus( this.nodes[i].position ).norm(),    // Connect neighboring nodes with
+                                                               spring_force: Vec.of( 0,0,0 ), spring_damper_force: Vec.of( 0,0,0 ) };                         // 1D spring segments.
+      this.segments[ false ] =                               { spring_force: Vec.of( 0,0,0 ), spring_damper_force: Vec.of( 0,0,0 ) };   // Define an extra segment to stand in for undefined ones 
+    }                                                                                                                                   // beyond boundaries.  Tension force is always zero there.
+  simulate( frame_time )                                              // Carefully advance time according to Glenn Fielder's "Fix Your Timestep" blog post. 
+    { frame_time = this.time_scale * frame_time;                      // This line lets us create the illusion to the simulator that the display framerate is running fast or slow.
+      this.time_accumulator += Math.min( frame_time, 0.1 ) ;	        // Avoid the spiral of death; limit the amount of time we will spend computing during this timestep if display lags.
+      while ( Math.abs( this.time_accumulator ) >= this.dt )			    // Repeatedly step the simulation until we're caught up with this frame.
+      { this.update_state( this.t, this.dt );                         // Single step of the simulation for all bodies.
+        
+        this.t                += Math.sign( frame_time ) * this.dt;   // Following the advice of the article, de-couple our simulation time from our frame rate.
+        this.time_accumulator -= Math.sign( frame_time ) * this.dt;
+      }     
+      this.alpha = this.time_accumulator / this.dt;                   // Store an interpolation factor for how close our frame fell in between the two latest simulation time steps, so
+    }                                                                 // we can correctly blend the two latest states and display the result.
+  blend_state() { for( let n of this.nodes ) n.drawn_position = n.previous_pos.mix( n.position, this.alpha ) }   // Blend our two most recent simulation states.  
+  update_state( t, dT )                                         // Apply the known forces in our particular setup to the velocities.  Then apply those to the positions using forward Euler.
+    { const K = 150, Kd = 1.4 * K, g = Vec.of( 0,-9.8,0 ).plus( this.get_claw_velocity().times( 10 ) );       // Set physical constants.
+      
+      for( let curr_seg of this.segments )
+      { let [p1, p2]              = curr_seg.endpoints.map( i => { return this.nodes[i].position }, this),
+            [v1, v2]              = curr_seg.endpoints.map( i => { return this.nodes[i].velocity }, this),
+            dPHI_dS               = p2.minus( p1 ).times( 1/curr_seg.dS );
+        let [ length, direction ] = [ dPHI_dS.norm(), dPHI_dS.normalized() ];
+        
+        // TODO:  Create a non-zero length for the spring segment's rest state and apply it to the formula here.
+        curr_seg.spring_force          = dPHI_dS.times( K*( length - .1 )/length ).times( 1/curr_seg.dS );
+        
+        // TODO:  Calculate the magnitude and direction of the damping force acting upon this spring segment along the segment's direction, and store it here:
+        //        ( Hint:  Use the variables direction, v1, v2, Kd, and 1/curr_seg.dS )
+        curr_seg.spring_damper_force   = v1.minus(v2).times(-1 * Kd);
+      }
+      
+      // Propagate the foreces from the spring segments to their adjacent nodes.  Wherever either neighbor is undefined, use the placeholder one from before instead:
+      let spring_force_at_node = (n) => { return n.force.plus( this.segments[ n.neighbors[1] ].spring_force       .minus( this.segments[ n.neighbors[0] ].spring_force        ) ); },
+          damper_force_at_node = (n) => { return n.force.plus( this.segments[ n.neighbors[1] ].spring_damper_force.minus( this.segments[ n.neighbors[0] ].spring_damper_force ) ); };
+          
+      ( function  zeroize_forces( nodes ) { for( let n of nodes ) n.force = Vec.of( 0,0,0 );                         } )( this.nodes );  // Sum the finished forces.
+      ( function   spring_forces( nodes ) { for( let n of nodes ) n.force = n.force.plus( spring_force_at_node(n) ); } )( this.nodes );  
+      ( function  damping_forces( nodes ) { for( let n of nodes ) n.force = n.force.plus( damper_force_at_node(n) ); } )( this.nodes );
+      ( function external_forces( nodes ) { for( let n of nodes ) n.force = n.force.plus( g                       ); } )( this.nodes );
+      
+      for( let n of this.nodes ) n.velocity = n.velocity.plus( n.force.times( dT ) );                                      // Apply the finished forces to velocity.
+      let final = this.nodes[ this.nodes.length-1 ];
+      final.velocity = final.velocity.minus( damper_force_at_node( final ).times( dT/6 ) ).minus( g.times( dT/2 ) );       // Carefully handle the mass of the last node.
+      this.nodes[ 0 ].velocity = Vec.of( 0,0,0 );                                                                 // Apply this scene's boundary condition(s):  Fix the first node in place.
+                                                                                                                  // TODO:  Try fixing more than one node in place.
+     
+      this.nodes[ this.N - 1 ].velocity = Vec.of( 0, 0, 0 );
+                                                                                                                  
+      this.advance( dT );
+    }
+  advance( dT )                                                         // Forward-Euler position update 
+  { for( let n of this.nodes )
+      { n.previous_pos = Vec.of( ...n.position );
+        n.position = n.position.plus( n.velocity.times( dT ) );         // Add each node's instantaneous velocity at time t.
+      }
+  }
+  /////////////////////////////////////////////////
   
 	// Drawn with origin at bearing, palm facing downward
 	draw_claw( graphics_state, model_transform, color )
@@ -915,8 +1084,8 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       let bearing_tf = model_transform;
       this.shapes.ball.draw( graphics_state, bearing_tf, color );
       
-      let claw_neck_tf = bearing_tf.times( Mat4.translation( Vec.of( 0, 11, 0 ) ) );
-      this.shapes.box.draw( graphics_state, claw_neck_tf.times( Mat4.scale( Vec.of( 0.5, 10, 0.5 ) ) ), color );
+      let claw_neck_tf = bearing_tf.times( Mat4.translation( Vec.of( 0, 10, 0 ) ) );
+      this.shapes.capped_cylinder.draw( graphics_state, claw_neck_tf.times( Mat4.scale( Vec.of( 1, 20, 1 ) ) ).times( Mat4.rotation( Math.PI * 1/2, Vec.of( 1, 0, 0 ) ) ), color );
       
       for ( let rot of [ 0, Math.PI * 2/3, Math.PI * 4/3 ] )
         {
@@ -936,6 +1105,8 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       this.shapes.claw_arm.draw( graphics_state, claw_arm_tf.times( Mat4.scale( Vec.of( 2, 2, 2 ) ) ), color );
     }
 }
+
+
 </script>
 <style>
   table { border-collapse: collapse; display:block; overflow-x: auto; }

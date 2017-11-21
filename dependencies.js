@@ -135,6 +135,16 @@ class Diamond extends Shape
     }
 }
 
+class Tiled_Square extends Shape
+{ constructor( x, y )                 // In these cases there's no reason not to re-use data of the common vertices between triangles.  This makes all the
+    { super();                  // vertex arrays (position, normals, etc) smaller and more cache friendly.
+      this.positions     .push( ...Vec.cast( [-1,-1,0], [1,-1,0], [-1,1,0], [1,1,0] ) );     // Specify the 4 vertices -- the point cloud that our Square needs.
+      this.normals       .push( ...Vec.cast( [0,0,1],   [0,0,1],  [0,0,1],  [0,0,1] ) );     // ...
+      this.texture_coords.push( ...Vec.cast( [0,0],     [x,0],    [0,y],    [x,y]   ) );     // ...
+      this.indices       .push( 0, 1, 2,     1, 3, 2 );                                      // Two triangles this time, indexing into four distinct vertices.
+    }
+}
+
   // *********** WINDMILL ***********
 class Windmill extends Shape   // As our shapes get more complicated, we begin using matrices and flow
 { constructor( num_blades )   // control (including loops) to generate non-trivial point clouds and connect them.
@@ -721,4 +731,32 @@ class Shape_From_File extends Shape          // A versatile standalone shape tha
       this.copy_onto_graphics_card( this.gl );
       this.ready = true;
     }   
+}
+
+class Text_Line extends Shape  // Draws a horizontal arrangment of quads textured over with images of ASCII characters, spelling out a string.
+{ constructor( max_size )
+    { super();
+      this.max_size = max_size;
+      let object_transform = Mat4.identity();
+      for( let i = 0; i < max_size; i++ )
+      { Square.prototype.insert_transformed_copy_into( this, [], object_transform );      // Each quad is a separate square object.
+        object_transform.post_multiply( Mat4.translation([ 1.5,0,0 ]) );
+      }
+    }
+  set_string( line, gl = this.gl )        // Overwrite the texture coordinates buffer with new values per quad that enclose each of the string's characters.
+    { this.texture_coords = [];
+      for( let i = 0; i < this.max_size; i++ )
+        {
+          let row = Math.floor( ( i < line.length ? line.charCodeAt( i ) : ' '.charCodeAt() ) / 16 ),
+              col = Math.floor( ( i < line.length ? line.charCodeAt( i ) : ' '.charCodeAt() ) % 16 );
+
+          let skip = 3, size = 32, sizefloor = size - skip;
+          let dim = size * 16,  left  = (col * size + skip) / dim,      top    = (row * size + skip) / dim,
+                                right = (col * size + sizefloor) / dim, bottom = (row * size + sizefloor + 5) / dim;
+
+          this.texture_coords.push( ...Vec.cast( [ left,  1-bottom], [ right, 1-bottom ], [ left,  1-top ], [ right, 1-top ] ) );
+        }
+      gl.bindBuffer( gl.ARRAY_BUFFER, this.graphics_card_buffers[2] );
+      gl.bufferData( gl.ARRAY_BUFFER, Mat.flatten_2D_to_1D( this.texture_coords ), gl.STATIC_DRAW );
+    }
 }
