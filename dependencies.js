@@ -57,6 +57,84 @@ class Tetrahedron extends Shape            // A demo of flat vs smooth shading (
     }
 }
 
+class Square_Pyramid extends Shape
+{
+  constructor( ) 
+    {
+      super();
+      
+      var a = 1/Math.sqrt(2);
+      
+      this.positions     .push( ...Vec.cast(  [-1,0,-1], [-1,0,1], [1,0,1],   // bottom face
+                                              [-1,0,1], [1,0,1], [1,0,-1],
+                                              [-1,0,1], [0,1,0], [1,0,1],     // back face
+                                              [-1,0,-1], [0,1,0], [1,0,-1],   // front face
+                                              [-1,0,-1], [0,1,0], [-1,0,1],   // right face
+                                              [1,0,-1], [0,1,0], [1,0,1]      // left face
+                                           ) );
+
+      this.normals       .push( ...Vec.cast(  [0,-1,0], [0,-1,0], [0,-1,0],         // bottom face
+                                              [0,-1,0], [0,-1,0], [0,-1,0],
+                                              [0,a,a], [0,a,a], [0,a,a],            // back face
+                                              [0,a,-1*a], [0,a,-1*a], [0,a,-1*a],   // front face
+                                              [-a,a,0], [-a,a,0], [-a,a,0],         // right face
+                                              [a,a,0], [a,a,0], [a,a,0]             // left face
+                                           ) );
+
+      this.texture_coords.push( ...Vec.cast( [0,0], [1,0], [1,0],
+                                             [0,0], [1,0], [1,0],
+                                             [0,0], [1,0], [1,0],
+                                             [0,0], [1,0], [1,0],
+                                             [0,0], [1,0], [1,0],
+                                             [0,0], [1,0], [1,0]
+                                           ) );
+
+      this.indices.push( 0, 1, 2,    3, 4, 5,    6, 7, 8,    9, 10, 11,    12, 13, 14,    15, 16, 17);
+    }
+}
+
+class Diamond extends Shape
+{
+  constructor( ) 
+    {
+      super();
+      
+      var a = 1/Math.sqrt(2);
+      
+      this.positions     .push( ...Vec.cast(  [-1,0,1], [0,1,0], [1,0,1],     // back face
+                                              [-1,0,-1], [0,1,0], [1,0,-1],   // front face
+                                              [-1,0,-1], [0,1,0], [-1,0,1],   // right face
+                                              [1,0,-1], [0,1,0], [1,0,1],     // left face
+                                              [-1,0,1], [0,-1,0], [1,0,1],     // back face         // bottom side
+                                              [-1,0,-1], [0,-1,0], [1,0,-1],   // front face
+                                              [-1,0,-1], [0,-1,0], [-1,0,1],   // right face
+                                              [1,0,-1], [0,-1,0], [1,0,1]      // left face
+                                           ) );
+
+      this.normals       .push( ...Vec.cast(  [0,a,a], [0,a,a], [0,a,a],            // back face
+                                              [0,a,-1*a], [0,a,-1*a], [0,a,-1*a],   // front face
+                                              [-a,a,0], [-a,a,0], [-a,a,0],         // right face
+                                              [a,a,0], [a,a,0], [a,a,0],            // left face
+                                              [0,-a,a], [0,-a,a], [0,-a,a],            // back face
+                                              [0,-a,-1*a], [0,-a,-1*a], [0,-a,-1*a],   // front face
+                                              [-a,-a,0], [-a,-a,0], [-a,-a,0],         // right face
+                                              [a,-a,0], [a,-a,0], [a,-a,0]             // left face
+                                           ) );
+
+      this.texture_coords.push( ...Vec.cast( [0,0], [1,0], [1,0],
+                                             [0,0], [1,0], [1,0],
+                                             [0,0], [1,0], [1,0],
+                                             [0,0], [1,0], [1,0],
+                                             [0,0], [1,0], [1,0],
+                                             [0,0], [1,0], [1,0],
+                                             [0,0], [1,0], [1,0],
+                                             [0,0], [1,0], [1,0]
+                                           ) );
+
+      this.indices.push( 0, 1, 2,    3, 4, 5,    6, 7, 8,    9, 10, 11,    12, 13, 14,    15, 16, 17,    18, 19, 20,    21, 22, 23 );
+    }
+}
+
   // *********** WINDMILL ***********
 class Windmill extends Shape   // As our shapes get more complicated, we begin using matrices and flow
 { constructor( num_blades )   // control (including loops) to generate non-trivial point clouds and connect them.
@@ -580,307 +658,67 @@ class Fake_Bump_Map extends Phong_Model  // Overrides Phong_Model except for one
     }
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////// TEST SCENES /////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Tutorial scene 
-class Tutorial_Animation extends Scene_Component  // An example of a Scene_Component that our class Canvas_Manager can manage.  Like most, this one draws 3D shapes.
-{ constructor( context )
-    { super( context );
-      var shapes = { 'triangle'        : new Triangle(),                            // At the beginning of our program, instantiate all shapes we plan to use,
-                     'strip'           : new Square(),                              // each with only one instance in the graphics card's memory.
-                     'bad_tetrahedron' : new Tetrahedron( false ),                  // For example we would only create one "cube" blueprint in the GPU, but then 
-                     'tetrahedron'     : new Tetrahedron( true ),                   // re-use it many times per call to display to get multiple cubes in the scene.
-                     'windmill'        : new Windmill( 10 ) };
-      this.submit_shapes( context, shapes );
-      
-       // Place the camera, which is stored in a scratchpad for globals.  Secondly, setup the projection:  The matrix that determines how depth is treated.  It projects 3D points onto a plane.
-      Object.assign( context.globals.graphics_state, { camera_transform: Mat4.translation([ 0, 0,-25 ]), projection_transform: Mat4.perspective( Math.PI/4, context.width/context.height, .1, 1000 ) } );
-      
-      // *** Materials: *** Declare new ones as temps when needed; they're just cheap wrappers for some numbers.  1st parameter:  Color (4 floats in RGBA format),
-      // 2nd: Ambient light, 3rd: Diffuse reflectivity, 4th: Specular reflectivity, 5th: Smoothness exponent, 6th: Optional texture object, leave off for un-textured.
-      Object.assign( this, { purplePlastic: context.get_instance( Phong_Model  ).material( Color.of( .9,.5,.9, 1 ), .4, .4, .8, 40 ),
-                             greyPlastic  : context.get_instance( Phong_Model  ).material( Color.of( .5,.5,.5, 1 ), .4, .8, .4, 20 ),   // Smaller exponent means 
-                             blueGlass    : context.get_instance( Phong_Model  ).material( Color.of( .5,.5, 1,.2 ), .4, .8, .4, 40 ),   // a bigger shiny spot.
-                             fire         : context.get_instance( Funny_Shader ).material(),
-                             stars        : context.get_instance( Phong_Model  ).material( Color.of( 0,0,1,1 ), .5, .5, .5, 40, context.get_instance( "assets/stars.png" ) ) } );                             
+class Shape_From_File extends Shape          // A versatile standalone shape that imports all its arrays' data from an
+{ constructor( filename )                    // .obj file.  Adapted from the open-source "webgl-obj-loader.js".
+    { super();                    // Begin downloading the mesh, and once it completes return control to our parse_into_mesh function:
+      new Object_From_File( filename, this.parse_into_mesh.bind(this) );     
     }
-  display( graphics_state )
-    { var model_transform = Mat4.identity();             // We begin with a brand new model_transform every frame.
-      
-      // *** Lights: *** Values of vector or point lights over time.  Two different lights *per shape* supported by Phong_Shader; more requires changing a number in the vertex 
-      graphics_state.lights = [ new Light( Vec.of(  30,  30,  34, 1 ), Color.of( 0, .4, 0, 1 ), 100000 ),      // shader.  Arguments to construct a Light(): Light source position
-                                new Light( Vec.of( -10, -20, -14, 0 ), Color.of( 1, 1, .3, 1 ), 100    ) ];    // or vector (homogeneous coordinates), color, and size.  
-      
-      model_transform.post_multiply( Mat4.translation([ 0, 5, 0 ]) );
-      this.shapes.triangle       .draw( graphics_state, model_transform, this.stars );
-      
-      model_transform.post_multiply( Mat4.translation([ 0, -2, 0 ]) );
-      this.shapes.strip          .draw( graphics_state, model_transform, this.greyPlastic   );
-      
-      var t = graphics_state.animation_time/1000,   tilt_spin   = Mat4.rotation( 12*t, Vec.of(          .1,          .8,             .1 ) ),
-                                                    funny_orbit = Mat4.rotation(  2*t, Vec.of( Math.cos(t), Math.sin(t), .7*Math.cos(t) ) );
+  draw( graphics_state, model_transform, material ) { if( this.ready ) super.draw( graphics_state, model_transform, material );   }
+  parse_into_mesh( data )
+    { var verts = [], vertNormals = [], textures = [], unpacked = {};
 
-      // Many shapes can share influence of the same pair of lights, but they don't have to.  All the following shapes will use these lights instead of the above ones.
-      graphics_state.lights = [ new Light( tilt_spin.times( Vec.of(  30,  30,  34, 1 ) ), Color.of( 0, .4, 0, 1 ), 100000               ),
-                                new Light( tilt_spin.times( Vec.of( -10, -20, -14, 0 ) ), Color.of( 1, 1, .3, 1 ), 100*Math.cos( t/10 ) ) ];
-                                
-      model_transform.post_multiply( Mat4.translation([ 0, -2, 0 ]) );
-      this.shapes.tetrahedron    .draw( graphics_state, model_transform.times( funny_orbit ), this.purplePlastic );
-      
-      model_transform.post_multiply( Mat4.translation([ 0, -2, 0 ]) );
-      this.shapes.bad_tetrahedron.draw( graphics_state, model_transform.times( funny_orbit ), this.greyPlastic   );
-      
-      model_transform.post_multiply( Mat4.translation([ 0, -2, 0 ]) );
-      this.shapes.windmill       .draw( graphics_state, model_transform.times( tilt_spin ),   this.purplePlastic );
-      model_transform.post_multiply( Mat4.translation([ 0, -2, 0 ]) );
-      this.shapes.windmill       .draw( graphics_state, model_transform,                      this.fire          );
-      model_transform.post_multiply( Mat4.translation([ 0, -2, 0 ]) );
-      this.shapes.windmill       .draw( graphics_state, model_transform,                      this.blueGlass     );
-    }
-}
+      unpacked.verts = [];    unpacked.norms = [];    unpacked.textures = [];   unpacked.hashindices = {};    unpacked.indices = [];  unpacked.index = 0;
 
-// Surfaces demo
-class Surfaces_Demo extends Scene_Component
-{ constructor( context )
-    { super( context );
-    
-      let square_array = Vec.cast( [ 1,0,-1 ], [ 0,1,-1 ], [ -1,0,-1 ], [ 0,-1,-1 ], [ 1,0,-1 ] ),               // Some helper arrays of points located along
-            star_array = Array(19).fill( Vec.of( 1,0,-1 ) ), circle_array = Array(40).fill( Vec.of( 1,0,-1 ) );  // curves.  We'll extrude these into surfaces.
-      circle_array = circle_array.map( (x,i,a) => Mat4.rotation( i/(a.length-1) * 2*Math.PI, Vec.of( 0,0,1 ) ).times( x.to4(1) ).to3() );
-      star_array   =   star_array.map( (x,i,a) => Mat4.rotation( i/(a.length-1) * 2*Math.PI, Vec.of( 0,0,1 ) ).times( Mat4.translation([ (i%2)/2,0,0 ]) ).times( x.to4(1) ).to3() );
-      
-      let sin_rows_func       =      i  => { return Vec.of( .5 + Math.sin(777*i)/4, 2-4*i, 0 ) },                                   // Different callbacks for telling Grid_Patch 
-          sin_columns_func    = ( j,p ) => { return Mat4.translation([ Math.sin(777*j)/4,0,4/30    ]).times( p.to4(1) ).to3() },    // how it chould advance to the next row/column.  
-          rotate_columns_func = ( j,p ) => { return Mat4.rotation( .1*j*Math.PI, Vec.of( 0,1,0 )    ).times( p.to4(1) ).to3() },
-          sample_square_func  =      i  => { return Grid_Patch.sample_array( square_array, i ) },
-          sample_star_func    =      i  => { return Grid_Patch.sample_array( star_array,   i ) },
-          sample_circle_func  =      i  => { return Grid_Patch.sample_array( circle_array, i ) },          
-          sample_two_arrays   = (j,p,i) => { return Mat4.translation([0,0,2*j]).times( sample_star_func(i).mix( sample_circle_func(i), j ).to4(1) ).to3() },
-          sample_two_arrays2  = (j,p,i) => { return Mat4.rotation( .5*j*Math.PI, Vec.of( 1,1,1 ) ).times( 
-                                                    Mat4.translation([0,0,2*j]).times( sample_star_func(i).mix( sample_square_func(i), j ).to4(1) ) ).to3() },
-          line_rows_func      = ( i,p ) => { return p ? Mat4.translation([0,i/50,0]).times( p.to4(1) ).to3() :  Vec.of( .01,-.05,-.1 ) },
-          transform_cols_func = (j,p,i) => { return Mat4.rotation( Math.PI/8, Vec.of( 0,0,1 ) ).times( Mat4.scale([ 1.1,1.1,1.1 ])).times( Mat4.translation([ 0,0,.005 ]))
-                                                      .times( p.to4(1) ).to3() };
-      var shapes = { good_sphere : new Subdivision_Sphere( 4 ),                                           // A sphere made of nearly equilateral triangles / no singularities
-                     vase        : new Grid_Patch( 30, 30, sin_rows_func, rotate_columns_func,   [[0,1],[0,1]] ),
-                     box         : new Cube(),
-                     ghost       : new Grid_Patch( 36, 10, sample_star_func, sample_two_arrays,  [[0,1],[0,1]] ),
-                     shell       : new Grid_Patch( 10, 40, line_rows_func, transform_cols_func,  [[0,5],[0,1]] ),
-                     waves       : new Grid_Patch( 30, 30, sin_rows_func, sin_columns_func,      [[0,1],[0,1]] ),
-                     shell2      : new Grid_Patch( 30, 30, sample_star_func, sample_two_arrays2, [[0,1],[0,1]] ),
-                     tube        : new Cylindrical_Tube  ( 10, 10, [[0,1],[0,1]] ),
-                     open_cone   : new Cone_Tip          (  3, 10, [[0,1],[0,1]] ),
-                     donut       : new Torus             ( 15, 15 ),
-                     gem2        : new ( Torus             .prototype.make_flat_shaded_version() )( 20, 20 ),
-                     bad_sphere  : new Grid_Sphere       ( 10, 10 ),                                            // A sphere made of rows and columns, with singularities
-                     septagon    : new Regular_2D_Polygon(  2,  7 ),
-                     cone        : new Closed_Cone       ( 4, 20, [[0,1],[0,1]] ),                       // Cone.  Useful.
-                     capped      : new Capped_Cylinder   ( 4, 12, [[0,1],[0,1]] ),                       // Cylinder.  Also useful.
-                     axis        : new Axis_Arrows(),                                                    // Axis.  Draw them often to check your current basis.
-                     prism       : new ( Capped_Cylinder   .prototype.make_flat_shaded_version() )( 10, 10, [[0,1],[0,1]] ),
-                     gem         : new ( Subdivision_Sphere.prototype.make_flat_shaded_version() )(  2     ),
-                     swept_curve : new Surface_Of_Revolution( 10, 10, [ ...Vec.cast( [2, 0, -1], [1, 0, 0], [1, 0, 1], [0, 0, 2] ) ], [ [ 0, 1 ], [ 0, 7 ] ], Math.PI/3 ),
-                   };
-      this.submit_shapes( context, shapes );
-      Object.assign( context.globals.graphics_state, { camera_transform: Mat4.translation([ -2,2,-15 ]), projection_transform: Mat4.perspective( Math.PI/4, context.width/context.height, .1, 1000 ) } );
-      Object.assign( this, { shader: context.get_instance( Fake_Bump_Map ), textures: [], gallery: false, patch_only: false, revolution_only: false } );
-      for( let filename of [ "/assets/rgb.jpg", "/assets/stars.png", "/assets/earth.gif", "/assets/text.png" ] ) this.textures.push( context.get_instance( filename ) ); this.textures.push( undefined );
-    }
-  display( graphics_state )
-    { let model_transform = Mat4.identity(), t = graphics_state.animation_time / 1000;
-      graphics_state.lights = [ new Light( Vec.of( 1,1,0, 0 ).normalized(), Color.of(  1, .5, .5, 1 ), 100000000 ),
-                                new Light( Vec.of( 0,1,0, 0 ).normalized(), Color.of( .5,  1, .5, 1 ), 100000000 ) ];
-                                  
-      for( var i = 0; i < 5; i++ )           // Draw some moving worm-like sequences of shapes.  Keep the matrix state from the previous one to draw the next one attached at the end.                                
-      { let j = i;
-        for( let key in this.shapes )
-        { j++;
-          if( this.patch_only      &&    this.shapes[ key ].constructor.name != "Grid_Patch"   ) continue;    // Filter some shapes out when those buttons have been pressed.
-          if( this.revolution_only && !( this.shapes[ key ] instanceof Surface_Of_Revolution ) ) continue;
-          
-          let funny_function_of_time = t/5 + j*j*Math.cos( t/10 )/50,
-                     random_material = this.shader.material( Color.of( (j % 6)/10, (j % 5)/10, (j % 4)/10, 1 ), .4, 1, 1, 40, this.textures[0] )
-              
-          model_transform.post_multiply( Mat4.rotation( funny_function_of_time, Vec.of(j%3 == 0, j%3 == 1, j%3 == 2) ) );   // Irregular motion
-          if( this.gallery ) model_transform.pre_multiply ( Mat4.translation([ 3, 0,0 ]) );   // Gallery mode:  Switch the rotation/translation order to line up the shapes.
-          else               model_transform.post_multiply( Mat4.translation([ 0,-3,0 ]) );
-          this.shapes[ key ].draw( graphics_state, model_transform, random_material );        //  Draw the current shape in the list    
+      var lines = data.split('\n');
+
+      var VERTEX_RE = /^v\s/;    var NORMAL_RE = /^vn\s/;    var TEXTURE_RE = /^vt\s/;    var FACE_RE = /^f\s/;    var WHITESPACE_RE = /\s+/;
+
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        var elements = line.split(WHITESPACE_RE);
+        elements.shift();
+
+        if      (VERTEX_RE.test(line))   verts.push.apply(verts, elements);
+        else if (NORMAL_RE.test(line))   vertNormals.push.apply(vertNormals, elements);
+        else if (TEXTURE_RE.test(line))  textures.push.apply(textures, elements);
+        else if (FACE_RE.test(line)) {
+          var quad = false;
+          for (var j = 0, eleLen = elements.length; j < eleLen; j++)
+          {
+              if(j === 3 && !quad) {  j = 2;  quad = true;  }
+              if(elements[j] in unpacked.hashindices) 
+                  unpacked.indices.push(unpacked.hashindices[elements[j]]);
+              else
+              {
+                  var vertex = elements[ j ].split( '/' );
+
+                  unpacked.verts.push(+verts[(vertex[0] - 1) * 3 + 0]);   unpacked.verts.push(+verts[(vertex[0] - 1) * 3 + 1]);   
+                  unpacked.verts.push(+verts[(vertex[0] - 1) * 3 + 2]);
+                  
+                  if (textures.length) 
+                    {   unpacked.textures.push(+textures[( (vertex[1] - 1)||vertex[0]) * 2 + 0]);
+                        unpacked.textures.push(+textures[( (vertex[1] - 1)||vertex[0]) * 2 + 1]);  }
+                  
+                  unpacked.norms.push(+vertNormals[( (vertex[2] - 1)||vertex[0]) * 3 + 0]);   unpacked.norms.push(+vertNormals[( (vertex[2] - 1)||vertex[0]) * 3 + 1]);
+                  unpacked.norms.push(+vertNormals[( (vertex[2] - 1)||vertex[0]) * 3 + 2]);
+                  
+                  unpacked.hashindices[elements[j]] = unpacked.index;
+                  unpacked.indices.push(unpacked.index);
+                  unpacked.index += 1;
+              }
+              if(j === 3 && quad)   unpacked.indices.push( unpacked.hashindices[elements[0]]);
+          }
         }
-        model_transform.post_multiply( Mat4.rotation( .5, Vec.of(0, 0, 1) ) );
-      }      
-    }
-  make_control_panel()   // This function of a scene sets up its keyboard shortcuts.
-    { this.key_triggered_button( "Next Texture",                   "t", function() { this.textures.push( this.textures.shift() )    },  "red" ); this.new_line();
-      this.key_triggered_button( "Gallery View",                   "g", function() { this.gallery ^= 1;                             }, "blue" ); this.new_line();
-      this.key_triggered_button( "Revolution Surfaces Only", "shift+S", function() { this.revolution_only = 1; this.patch_only = 0; }         ); this.new_line();
-      this.key_triggered_button( "Custom Patches Only",      "shift+C", function() { this.revolution_only = 0; this.patch_only = 1; }         ); this.new_line();
-      this.key_triggered_button( "All Shapes",               "shift+A", function() { this.revolution_only = 0; this.patch_only = 0; }         );
-    }
-  show_explanation( document_element )
-    { }
-}
-
-// Star demo
-class Star extends Surfaces_Demo    // An example of animating a special effect by exploring the space of possible transformations on an object.
-{ constructor( context )
-    { super( context );
-      Object.assign( this, { shapes_array: Object.values( this.shapes ), rows: 20, columns: 20 } );
-      let a = context.width / context.height;
-      Object.assign( context.globals.graphics_state, { camera_transform: Mat4.translation([ 0,0,-3 ]), 
-                                                   projection_transform: Mat4.perspective( Math.PI/4, context.width/context.height, 2, 1000 ) } );
-    }
-  display( graphics_state )
-    { var t = this.t = graphics_state.animation_time/1000,   funny_orbit = Mat4.rotation(  Math.PI/4*t, Vec.of( Math.cos(t), Math.sin(t), .7*Math.cos(t) ) );
-      graphics_state.lights = [ new Light( funny_orbit.times( Vec.of(  30,  30,  34, 0 ) ), Color.of( 0, .4, 0, 1 ), 100000               ),
-                                new Light( funny_orbit.times( Vec.of( -10, -20, -14, 0 ) ), Color.of( 1, 1, .3, 1 ), 100*Math.cos( t/10 ) ) ];
-                                
-      for( var r = 0;              r < 1;     r+= 1/this.rows    )
-      for( var c = 1/this.columns; c < 1.001; c+= 1/this.columns )
-        { var model_transform =              Mat4.rotation   (  14*Math.PI*r, Vec.of(0, 0, 1) )
-                                     .times( Mat4.rotation   (       .71*t*c, Vec.of(0, 1, 0) ) )
-                                     .times( Mat4.translation([ 2.1*c*Math.sin( t*c ),  0, 0  ]) )
-                                     .times( Mat4.scale      ([    .3*Math.sin( .43*t ), .3*Math.sin( .37*t+r ), .3*Math.sin( .31*t+c ) ]) );
-          
-          this.shapes_array[0].draw( graphics_state, model_transform, this.shader.material( Color.of( (c%2)/5, (r%3)/5, ((c+r)%5)/5, 1 ), .4, 1, 1, 40, this.textures[0] ) );
-        }
-    }
-  make_control_panel()
-    { this.key_triggered_button( "Next Texture",                   "t", function() { this.textures    .push( this.textures    .shift() )    },  "red" );
-      this.live_string( () => { return "Current: "  + (this.textures[0] && this.textures[0].filename) } ); this.new_line();
-      this.key_triggered_button( "Next Shape",                     "h", function() { this.shapes_array.push( this.shapes_array.shift() )    }, "blue" ); 
-      this.live_string( () => { return "Current: "  + this.shapes_array[0].constructor.name } ); this.new_line();
-      this.live_string( () => { return "Number of shapes being drawn: "     +                                         this.rows * this.columns } ); this.new_line();
-      this.live_string( () => { return "Number of triangles being drawn: "  + this.shapes_array[0].indices.length/3 * this.rows * this.columns } ); this.new_line();
-      this.live_string( () => { return "Number of vertices connected: "     + this.shapes_array[0].positions.length * this.rows * this.columns } ); this.new_line();
-    }
-  show_explanation( document_element )
-    { }
-}
-
-// Springs demo
-class Springs_Demo extends Scene_Component          // Draw a falling 1D string.  Step a simulation of Hooke's law in fixed time increments using the forward-Euler method.
-{ constructor( context )
-    { super( context );
-      this.submit_shapes( context, { spring_segment: new Axis_Arrows() } );
-      Object.assign( context.globals.graphics_state, { camera_transform: Mat4.look_at( ...Vec.cast( [ 0,0,6 ], [0,0,0], [0,1,0] ) ),
-                                                   projection_transform: Mat4.perspective( Math.PI/4, context.width/context.height, .1, 1000 ) } );
-      Object.assign( this, { orange: context.get_instance( Phong_Model ).material( Color.of( .8,.4,0,1 ), .3, .8, .8, 40, context.get_instance( "/assets/rgb.jpg" ) ), globals: context.globals,
-                     nodes: [], segments: [], time_accumulator: 0, time_scale: 1/2000, t: 0, dt: 1/500, N: 20  } );            // Define the step size for time, and the amount of
-      this.reset();                                                                                                            // nodes to discretize the spring into spatially.
-    }
-  reset()       // Define a data structure for the spring, organizing some data the reside at the nodes (0D points) and some at the springs (1D line segments).
-    { for( let i = 0; i < this.N;   i++ ) this.nodes[i] = { neighbors: [ i > 0 && i-1, i < this.N-1 && i ], previous_pos: Vec.of( 0,0,0 ), velocity: Vec.of( 0,0,0 ) };   // Define nodes.
-      this.nodes.forEach( (n,i,a) => n.position = Mat4.rotation( 2*Math.PI*i/a.length, Vec.of( 0,1,0 ) ).times( Vec.of( -1,2,0,1 ) ).to3() );    // Initial position of nodes: a circle.
-     
-      for( let i = 0; i < this.N-1; i++ ) this.segments[i] = { endpoints: [ i, i+1 ], dS: this.nodes[i+1].position.minus( this.nodes[i].position ).norm(),    // Connect neighboring nodes with
-                                                               spring_force: Vec.of( 0,0,0 ), spring_damper_force: Vec.of( 0,0,0 ) };                         // 1D spring segments.
-      this.segments[ false ] =                               { spring_force: Vec.of( 0,0,0 ), spring_damper_force: Vec.of( 0,0,0 ) };   // Define an extra segment to stand in for undefined ones 
-    }                                                                                                                                   // beyond boundaries.  Tension force is always zero there.
-  simulate( frame_time )                                              // Carefully advance time according to Glenn Fielder's "Fix Your Timestep" blog post. 
-    { frame_time = this.time_scale * frame_time;                      // This line lets us create the illusion to the simulator that the display framerate is running fast or slow.
-      this.time_accumulator += Math.min( frame_time, 0.1 ) ;	        // Avoid the spiral of death; limit the amount of time we will spend computing during this timestep if display lags.
-      while ( Math.abs( this.time_accumulator ) >= this.dt )			    // Repeatedly step the simulation until we're caught up with this frame.
-      { this.update_state( this.t, this.dt );                         // Single step of the simulation for all bodies.
-        
-        this.t                += Math.sign( frame_time ) * this.dt;   // Following the advice of the article, de-couple our simulation time from our frame rate.
-        this.time_accumulator -= Math.sign( frame_time ) * this.dt;
-      }     
-      this.alpha = this.time_accumulator / this.dt;                   // Store an interpolation factor for how close our frame fell in between the two latest simulation time steps, so
-    }                                                                 // we can correctly blend the two latest states and display the result.
-  blend_state() { for( let n of this.nodes ) n.drawn_position = n.previous_pos.mix( n.position, this.alpha ) }   // Blend our two most recent simulation states.  
-  update_state( t, dT )                                         // Apply the known forces in our particular setup to the velocities.  Then apply those to the positions using forward Euler.
-    { const K = 50, Kd = 1.4 * K, g = Vec.of( 0,-9.8,0 );       // Set physical constants.
-      
-      for( let curr_seg of this.segments )
-      { let [p1, p2]              = curr_seg.endpoints.map( i => { return this.nodes[i].position }, this),
-            [v1, v2]              = curr_seg.endpoints.map( i => { return this.nodes[i].velocity }, this),
-            dPHI_dS               = p2.minus( p1 ).times( 1/curr_seg.dS );
-        let [ length, direction ] = [ dPHI_dS.norm(), dPHI_dS.normalized() ];
-        
-        // TODO:  Create a non-zero length for the spring segment's rest state and apply it to the formula here.
-        curr_seg.spring_force          = dPHI_dS.times( K*( length                    )/length ).times( 1/curr_seg.dS );
-        
-        // TODO:  Calculate the magnitude and direction of the damping force acting upon this spring segment along the segment's direction, and store it here:
-        //        ( Hint:  Use the variables direction, v1, v2, Kd, and 1/curr_seg.dS )
-        curr_seg.spring_damper_force   = Vec.of( 0,0,0 );
       }
-      
-      // Propagate the foreces from the spring segments to their adjacent nodes.  Wherever either neighbor is undefined, use the placeholder one from before instead:
-      let spring_force_at_node = (n) => { return n.force.plus( this.segments[ n.neighbors[1] ].spring_force       .minus( this.segments[ n.neighbors[0] ].spring_force        ) ); },
-          damper_force_at_node = (n) => { return n.force.plus( this.segments[ n.neighbors[1] ].spring_damper_force.minus( this.segments[ n.neighbors[0] ].spring_damper_force ) ); };
-          
-      ( function  zeroize_forces( nodes ) { for( let n of nodes ) n.force = Vec.of( 0,0,0 );                         } )( this.nodes );  // Sum the finished forces.
-      ( function   spring_forces( nodes ) { for( let n of nodes ) n.force = n.force.plus( spring_force_at_node(n) ); } )( this.nodes );  
-      ( function  damping_forces( nodes ) { for( let n of nodes ) n.force = n.force.plus( damper_force_at_node(n) ); } )( this.nodes );
-      ( function external_forces( nodes ) { for( let n of nodes ) n.force = n.force.plus( g                       ); } )( this.nodes );
-      
-      for( let n of this.nodes ) n.velocity = n.velocity.plus( n.force.times( dT ) );                                      // Apply the finished forces to velocity.
-      let final = this.nodes[ this.nodes.length-1 ];
-      final.velocity = final.velocity.minus( damper_force_at_node( final ).times( dT/6 ) ).minus( g.times( dT/2 ) );       // Carefully handle the mass of the last node.
-      this.nodes[ 0 ].velocity = Vec.of( 0,0,0 );                                                                 // Apply this scene's boundary condition(s):  Fix the first node in place.
-                                                                                                                  // TODO:  Try fixing more than one node in place.
-      this.advance( dT );
-    }
-  advance( dT )                                                         // Forward-Euler position update 
-  { for( let n of this.nodes )
-      { n.previous_pos = Vec.of( ...n.position );
-        n.position = n.position.plus( n.velocity.times( dT ) );         // Add each node's instantaneous velocity at time t.
+      for( var j = 0; j < unpacked.verts.length/3; j++ )
+      {
+        this.positions     .push( Vec.of( unpacked.verts[ 3*j ], unpacked.verts[ 3*j + 1 ], unpacked.verts[ 3*j + 2 ] ) );        
+        this.normals       .push( Vec.of( unpacked.norms[ 3*j ], unpacked.norms[ 3*j + 1 ], unpacked.norms[ 3*j + 2 ] ) );
+        this.texture_coords.push( Vec.of( unpacked.textures[ 2*j ], unpacked.textures[ 2*j + 1 ]  ));
       }
-  }
-  make_control_panel()
-    { this.key_triggered_button( "Speed up time",      "SHIFT+p", function() { this.time_scale *= 1.5 } );
-      this.key_triggered_button( "Slow down time",    "p",        function() { this.time_scale /= 1.5 } ); this.new_line();
-      this.live_string( () => { return "Time scale: "  + this.time_scale                              } ); this.new_line();
-      this.live_string( () => { return "Fixed simulation time step size: "  + this.dt                 } ); this.new_line();
-      this.key_triggered_button( "Reset simulation",  "SHIFT+r",  function() { this.reset()           } ); this.new_line();
-    }
-  show_explanation( document_element )
-    { }
-  display( graphics_state )
-    { graphics_state.lights = [ new Light( Vec.of( 3,2,1,0 ), Color.of( 1,1,1,1 ), 1000000 ), new Light( Vec.of( 3,10,10,1 ), Color.of( 1,.7,.7,1 ), 100000 ) ];
-      
-      if( this.globals.animate ) this.simulate( graphics_state.animation_delta_time );                 // Advance the time and state of our whole simulation.
-      this.blend_state();
-      
-      let previous_point;                                                                              // Begin drawing the spring.
-      for( let n of this.nodes )
-      { let target = previous_point;                                                                   // When drawing, point each segment at the previous one using look_at().
-        if( !previous_point || previous_point.equals( n.drawn_position ) ) target = Vec.of( 0,10,0 );
-    
-        let matrix = Mat4.inverse( Mat4.look_at( n.drawn_position, target, Vec.of( 0,0,1 ) ) );        // Remember to invert the result of look_at() since it is originally for cameras. 
-        previous_point = Vec.of( ...n.drawn_position );        
-        this.shapes.spring_segment.draw( graphics_state, matrix.times( Mat4.scale([ .1,.1,.1 ]) ), this.orange );       // Draw the spring segment.
-      }
-    }
-}
-
-// Movement demo
-class Out_Of_Body_Demo extends Scene_Component
-{ constructor( context )
-    { super( context );
-      this.submit_shapes( context, { arrows : new Axis_Arrows() } );
-      Object.assign( this, { location: Mat4.identity(),
-                                  rgb: context.get_instance( Phong_Model ).material( Color.of( 0,0,0,1 ),  1, 1, 1, 40, context.get_instance( "/assets/rgb.jpg" ) ),
-                               purple: context.get_instance( Phong_Model ).material( Color.of( 1,0,1,1 ), .4, 1, 1, 40                                          ) } );
-      Object.assign( context.globals.graphics_state, { camera_transform: Mat4.translation([ 0,-5,-25 ]), 
-                                                   projection_transform: Mat4.perspective( Math.PI/4, context.width/context.height, .1, 1000 ) } );                                                  
-      context.globals.graphics_state.lights = [ new Light( Vec.of( 1,1,0,0 ).normalized(), Color.of(  1, .5, .5, 1 ), 100000 ),
-                                                new Light( Vec.of( 0,1,0,0 ).normalized(), Color.of( .5,  1, .5, 1 ), 100000 ) ];
-      this.location = Mat4.identity();         
-    }
-  make_control_panel()   // This function of a scene sets up its keyboard shortcuts.
-    { this.key_triggered_button( "Capture controls", "c", function() 
-                                                          { this.globals.movement_target_is_a_camera = false;
-                                                            let ref = this;
-                                                            this.globals.movement_controls_target = function() { return ref.location }    
-                                                          },  "red" ); this.new_line();
-    }
-  show_explanation( document_element )
-    { }
-  display( graphics_state )
-    { this.shapes.arrows.draw( graphics_state, this.location, this.rgb );
-      for( let i of [ -5, 5 ] ) for( let j of [ -5, 5 ] ) this.shapes.arrows.draw( graphics_state, Mat4.translation([ i,0,j ]), this.purple );      
-    }
+      this.indices = unpacked.indices;
+      this.normalize_positions();
+      this.copy_onto_graphics_card( this.gl );
+      this.ready = true;
+    }   
 }
