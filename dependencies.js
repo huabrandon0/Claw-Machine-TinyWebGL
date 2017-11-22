@@ -47,10 +47,10 @@ class Tetrahedron extends Shape            // A demo of flat vs smooth shading (
                                                [-1,0,0], [-1,0,0], [-1,0,0],        // Repeat them for all three vertices.
                                                [ a,a,a], [ a,a,a], [ a,a,a] ) );
 
-        this.texture_coords.push( ...Vec.cast( [0,0], [1,0], [1,0],      // Each face in Method 2 also gets its own set of texture coords
-                                               [0,0], [1,0], [1,0],      //(half the image is mapped onto each face).  We couldn't do this
-                                               [0,0], [1,0], [1,0],      // with shared vertices since this features abrupt transitions
-                                               [0,0], [1,0], [1,0] ) );  // when approaching the same point from different directions.
+        this.texture_coords.push( ...Vec.cast( [0,0], [1,0], [0,1],      // Each face in Method 2 also gets its own set of texture coords
+                                               [0,0], [1,0], [0,1],      //(half the image is mapped onto each face).  We couldn't do this
+                                               [0,0], [1,0], [0,1],      // with shared vertices since this features abrupt transitions
+                                               [0,0], [1,0], [0,1] ) );  // when approaching the same point from different directions.
 
         this.indices.push( 0, 1, 2,    3, 4, 5,    6, 7, 8,    9, 10, 11 );      // Notice all vertices are unique this time.
       }
@@ -81,12 +81,12 @@ class Square_Pyramid extends Shape
                                               [a,a,0], [a,a,0], [a,a,0]             // left face
                                            ) );
 
-      this.texture_coords.push( ...Vec.cast( [0,0], [1,0], [1,0],
-                                             [0,0], [1,0], [1,0],
-                                             [0,0], [1,0], [1,0],
-                                             [0,0], [1,0], [1,0],
-                                             [0,0], [1,0], [1,0],
-                                             [0,0], [1,0], [1,0]
+      this.texture_coords.push( ...Vec.cast( [0,0], [1,0], [0,1],
+                                             [0,0], [1,0], [0,1],
+                                             [0,0], [1,0], [0,1],
+                                             [0,0], [1,0], [0,1],
+                                             [0,0], [1,0], [0,1],
+                                             [0,0], [1,0], [0,1]
                                            ) );
 
       this.indices.push( 0, 1, 2,    3, 4, 5,    6, 7, 8,    9, 10, 11,    12, 13, 14,    15, 16, 17);
@@ -121,14 +121,14 @@ class Diamond extends Shape
                                               [a,-a,0], [a,-a,0], [a,-a,0]             // left face
                                            ) );
 
-      this.texture_coords.push( ...Vec.cast( [0,0], [1,0], [1,0],
-                                             [0,0], [1,0], [1,0],
-                                             [0,0], [1,0], [1,0],
-                                             [0,0], [1,0], [1,0],
-                                             [0,0], [1,0], [1,0],
-                                             [0,0], [1,0], [1,0],
-                                             [0,0], [1,0], [1,0],
-                                             [0,0], [1,0], [1,0]
+      this.texture_coords.push( ...Vec.cast( [0,0], [1,0], [0,1],
+                                             [1,1], [1,0], [0,1],
+                                             [0,0], [1,0], [0,1],
+                                             [1,1], [1,0], [0,1],
+                                             [0,0], [1,0], [0,1],
+                                             [1,1], [1,0], [0,1],
+                                             [0,0], [1,0], [0,1],
+                                             [1,1], [1,0], [0,1]
                                            ) );
 
       this.indices.push( 0, 1, 2,    3, 4, 5,    6, 7, 8,    9, 10, 11,    12, 13, 14,    15, 16, 17,    18, 19, 20,    21, 22, 23 );

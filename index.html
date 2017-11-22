@@ -6,7 +6,8 @@
   window.onload = function init()        // ********************* THE ENTRY POINT OF THE WHOLE PROGRAM STARTS HERE ********************* 
     { window.contexts = {};                                                            // A global variable, "contexts".  Browsers support up to 16 WebGL contexts per page.
       
-      const scenes  = ["Animation_Manager", "My_Animation", "Movement_Controls", "Global_Info_Table", "Gameplay_Controls" ]; // Register some scenes to the "Canvas_Manager" object -- which WebGL calls
+      // const scenes  = [ "Movement_Controls", "Global_Info_Table", "Animation_Manager", "My_Animation", "Gameplay_Controls" ]; cip
+      const scenes  = [ "Movement_Controls", "Global_Info_Table", "Animation_Manager", "My_Animation", "Gameplay_Controls" ]; // Register some scenes to the "Canvas_Manager" object -- which WebGL calls
                                                                                        // upon every time a draw / keyboard / mouse event happens.  
       
       if( eval( "typeof " + scenes[0] ) !== "undefined" )
@@ -110,6 +111,33 @@ class Animation_Manager extends Scene_Component
       this.set_claw_velocity = function( new_vel ) { context.globals.claw_velocity = new_vel };
       context.globals.claw_velocity = Vec.of( 0, 0, 0 );
       
+      // Sound Effects
+      context.globals.background_noise = new Audio( "/assets/arcade_background.mp3" );
+      context.globals.lose_sound = new Audio( "/assets/buzzer_sound.mp3" );
+      context.globals.win_sound = new Audio( "/assets/slot_machine_win.mp3" );
+      context.globals.victory_sound = new Audio( "/assets/party_horn.mp3" );
+      context.globals.victory_sound_has_played = false;
+      
+      context.globals.player_has_won = false;
+      
+      // Background noise coroutine
+      this.play_background_noise = this.coroutine( function*()
+        {
+          while (true)
+            {
+              yield;
+              
+              // Play background noise and loop
+              context.globals.background_noise.play();
+              
+              if ( context.globals.player_has_won && !context.globals.victory_sound_has_played )
+                {
+                  context.globals.victory_sound.play();
+                  context.globals.victory_sound_has_played = true;
+                }
+            }
+        });
+      
       // Drop claw coroutine
       this.grab_animation = this.coroutine( function*()
         {
@@ -128,7 +156,7 @@ class Animation_Manager extends Scene_Component
               let start_time = context.globals.graphics_state.animation_time;
               let duration_time = context.globals.graphics_state.animation_time - start_time;
               
-              let drop_height = 28;
+              let drop_height = 29;
               let raised_pos = context.globals.claw_tf;
               let lowered_pos = raised_pos.times( Mat4.translation( Vec.of( 0, -1 * drop_height, 0 ) ) );
               
@@ -143,7 +171,7 @@ class Animation_Manager extends Scene_Component
               // Making the claw exactly in dropped position
               context.globals.claw_tf = lowered_pos;
               
-              // Time delay for suspense for the release
+              // Time delay for suspense
 							total_time = 200;
               start_time = context.globals.graphics_state.animation_time;
               duration_time = context.globals.graphics_state.animation_time - start_time;
@@ -279,6 +307,19 @@ class Animation_Manager extends Scene_Component
                   yield;
                 }
               
+              yield;
+              
+              if ( context.globals.item_picked_up )
+                {
+                  // Play win sound
+                  context.globals.win_sound.play();
+                }
+              else
+                {
+                  // Play lose sound
+                  context.globals.lose_sound.play();
+                }
+              
               // Useful animation variables
               let total_time = 0;
               let start_time = 0;
@@ -292,28 +333,12 @@ class Animation_Manager extends Scene_Component
               start_time = context.globals.graphics_state.animation_time;
               duration_time = context.globals.graphics_state.animation_time - start_time;
               
-              //cip
-              <!-- let orig_pickup_tf = context.globals.pickup_tf; -->
-              <!-- let end_pickup_tf = context.globals.prize_tf; -->
-              
-              <!-- let orig_pickup_pos = orig_pickup_tf.times( Vec.of( 0, 0, 0, 1 ) ); -->
-              <!-- let end_pickup_pos = end_pickup_tf.times( Vec.of( 0, 0, 0, 1 ) ); -->
-              <!-- let orig_to_end_vec = orig_pickup_pos.minus( end_pickup_pos ).to3(); -->
-              <!-- console.log(orig_pickup_pos) -->
-              <!-- console.log(end_pickup_tf) -->
-              <!-- console.log(orig_to_end_vec) -->
-              
 							let grip_amplitude = Math.PI/12;
 							
               while ( duration_time < total_time )
                 {
                   yield;
                   context.globals.claw_rot_tf = Mat4.rotation( grip_amplitude * ( Math.sin( Math.PI/2 * duration_time/total_time ) ), Vec.of( 1, 0, 0 ) );
-                 
-                  //cip
-                  <!-- // interp pickup_item_tf to prize_tf -->
-                  <!-- context.globals.pickup_tf = orig_pickup_tf.times( Mat4.translation( orig_to_end_vec.times( duration_time/total_time ) ) ); -->
-                  
                   duration_time = context.globals.graphics_state.animation_time - start_time;
                 }
               
@@ -420,6 +445,8 @@ class Animation_Manager extends Scene_Component
               // Set items_won array, assuming an item was picked up
               context.globals.items_won[context.globals.item_num] = true;
               
+              context.globals.player_has_won = context.globals.items_won.every( x => x == true );
+              
               // Set flag off
               context.globals.is_dropping_prize = false;
             }
@@ -440,6 +467,9 @@ class Animation_Manager extends Scene_Component
     {
       if ( this.target_is_claw() )
         {
+          // Plays background noise
+          this.play_background_noise();
+        
           // Default cam
           this.set_cam_tf( Mat4.look_at( Vec.of( 0, 40, 70 ), this.get_claw_tf().times( Vec.of( 0, 0, 0, 1 ) ).to3().minus( Vec.of( 0, 25, 0 ) ), Vec.of( 0, 1, 0 ) ) );
         
@@ -453,7 +483,14 @@ class Animation_Manager extends Scene_Component
                 }
               
               // Follow claw close-up
-              this.set_cam_tf( Mat4.look_at( Vec.of( 0, 10, 40 ), this.get_claw_tf().times( Vec.of( 0, 0, 0, 1 ) ).to3().minus( Vec.of( 0, 5, 0 ) ), Vec.of( 0, 1, 0 ) ) );
+              if ( this.get_claw_tf()[2][3] < -5 )
+                {
+                  this.set_cam_tf( Mat4.look_at( Vec.of( 0, 30, 16 ), this.get_claw_tf().times( Vec.of( 0, 0, 0, 1 ) ).to3().minus( Vec.of( 0, 5, 0 ) ), Vec.of( 0, 1, 0 ) ) );
+                }
+              else //
+                {
+                  this.set_cam_tf( Mat4.look_at( Vec.of( 0, 13, this.get_claw_tf()[2][3] + 40 ), this.get_claw_tf().times( Vec.of( 0, 0, 0, 1 ) ).to3().minus( Vec.of( 0, 5, 0 ) ), Vec.of( 0, 1, 0 ) ) );
+                }
             }
           
           if ( this.is_returning() )
@@ -477,7 +514,8 @@ class Animation_Manager extends Scene_Component
                 }
               else
                 {
-                  this.set_prize_tf( this.get_claw_tf().times( Mat4.translation( Vec.of( 0, -5, 0 ) ) ) )
+                  // Set normal prize_tf value
+                  this.set_prize_tf( this.get_claw_tf().times( Mat4.translation( Vec.of( 0, -4, 0 ) ) ) )
                 }
                 
               if ( !this.is_grabbing() )
@@ -508,9 +546,6 @@ class Gameplay_Controls extends Scene_Component
       this.get_claw_tf = function() { return context.globals.claw_tf };
       this.set_claw_tf = function( new_claw_tf ) { context.globals.claw_tf = new_claw_tf };
       
-      // Whether the target of the controls is the claw
-      this.target_is_claw = function() { return context.globals.target_is_claw }
-      
       // Whether the drop claw animation is playing
       this.is_grabbing = function() { return context.globals.is_grabbing };
       
@@ -522,7 +557,7 @@ class Gameplay_Controls extends Scene_Component
       
       // Whether the target of the controls is the claw
       this.target_is_claw = function() { return context.globals.target_is_claw }
-      context.globals.target_is_claw = false;
+      context.globals.target_is_claw = true; // cip
       
       // Joystick rotation transform
       context.globals.joystick_rot_tf = Mat4.identity();
@@ -538,6 +573,11 @@ class Gameplay_Controls extends Scene_Component
       this.get_claw_velocity = function() { return context.globals.claw_velocity };
       this.set_claw_velocity = function( new_vel ) { context.globals.claw_velocity = new_vel };
       context.globals.claw_velocity = Vec.of( 0, 0, 0 );
+      
+      // Sound effects
+      context.globals.button_click = new Audio( "/assets/button_click.mp3" );
+      this.get_button_click = function() { return context.globals.button_click };
+      
     }
     
   make_control_panel()   // This function of a scene sets up its keyboard shortcuts.
@@ -552,7 +592,7 @@ class Gameplay_Controls extends Scene_Component
                                                           {
                                                             this.globals.movement_target_is_a_camera = !this.globals.movement_target_is_a_camera;
                                                             this.globals.target_is_claw = !this.globals.movement_target_is_a_camera;
-                                                          }, "red" ); this.new_line();
+                                                          }, "red" ); this.new_line(); //cip
                                                           
       
     }
@@ -634,6 +674,7 @@ class Gameplay_Controls extends Scene_Component
           if (!this.globals.is_grabbing && !this.globals.is_returning && !this.globals.is_dropping_prize)
             {
               this.globals.is_grabbing = true;
+              this.get_button_click().play();
             }
         }
       else
@@ -694,24 +735,27 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       Object.assign( this, { text_image: context.get_instance( Phong_Model ).material( Color.of( 0,0,0,1 ), 1, 0, 0, 1, context.get_instance( "/assets/text.png" ) ) } );
                        
       Object.assign( this, { hover: false, t: 0, fps: 0,
-                             yellow: context.get_instance( Phong_Model ).material( Color.of( .8, .8, .3,  1 ), .2, 1, .7, 40 ),  // Call material() on the Phong_Shader,
+                             yellow: context.get_instance( Phong_Model ).material( Color.of( .8, .8, .3,  1 ), .1, .5, .4, 40, context.get_instance( "assets/bw_messy.jpg" ) ),  // Call material() on the Phong_Shader,
                              brown:  context.get_instance( Phong_Model ).material( Color.of( .3, .3, .1,  1 ), .2, 1,  1, 40 ),  // which returns a special-made "material" 
                              red:    context.get_instance( Phong_Model ).material( Color.of(  1,  0,  0, .9 ), .1, .7, 1, 40 ),  // (a JavaScript object)
                              green:  context.get_instance( Phong_Model ).material( Color.of(  0, .5,  0,  1 ), .1, .7, 1, 40 ),
-                             blue:   context.get_instance( Phong_Model ).material( Color.of(  0,  0,  1, .8 ), .1, .7, 1, 40 ),
-                             silver: context.get_instance( Phong_Model ).material( Color.of( .5, .5, .5,  1 ),  .5,  1, 1, 40 ),
-                             dark_silver: context.get_instance( Phong_Model ).material( Color.of( .5, .5, .5,  1 ),  .3, .3, .3, 40 ),
-                             window_color: context.get_instance( Phong_Model ).material( Color.of( .7, .7, .7,  .05 ),  .1,  .1, .1, 40 ),
-                             joystick_color: context.get_instance( Phong_Model ).material( Color.of( 1, 1, 1,  1 ),  .1,  .1, .1, 40 ),
-                             button_color: context.get_instance( Phong_Model ).material( Color.of( .8, .1, .1,  1 ),  .8,  .8, 1, 40 ),
-                             button_color_flash: context.get_instance( Phong_Model ).material( Color.of( 1, 0, 0,  1 ),  1,  1, 1, 40 ),
-                             purple: context.get_instance( Phong_Model ).material( Color.of(  60/255,  30/255,  130/255, 1 ), 0, 1, 1, 40 ),
-                             diamond: context.get_instance( Phong_Model ).material( Color.of( .5 , .5, .5, 1 ), .8, .2, .5, 40, context.get_instance( "assets/diamond.png" ) ),
-                             black: context.get_instance( Phong_Model ).material( Color.of( 0, 0, 0, 1 ), .1, .7, 1, 40 ),
+                             blue:   context.get_instance( Phong_Model ).material( Color.of(  0/255, 220/255, 220/255, 1 ), .1, .5, .4, 40, context.get_instance( "assets/bw_messy.jpg" ) ),
+                             silver: context.get_instance( Phong_Model ).material( Color.of( .5, .5, .5,  1 ),  .2,   1, 1, 40 ),
+                             dark_silver: context.get_instance( Phong_Model ).material( Color.of( .5, .5, .5,  1 ), .2, .3, .3, 40 ),
+                             window_color: context.get_instance( Phong_Model ).material( Color.of( .8, .4, .3,  .05 ), .05, .1, .1, 40 ),
+                             joystick_color: context.get_instance( Phong_Model ).material( Color.of( 1, 1, 1,  1 ),  .1, .1, .1, 40 ),
+                             button_color: context.get_instance( Phong_Model ).material( Color.of( .8, .1, .1,  1 ),  .6, .5, .5, 40 ),
+                             button_color_flash: context.get_instance( Phong_Model ).material( Color.of( .8, .1, .1,  1 ),  1, 1, 1, 40 ),
+                             purple: context.get_instance( Phong_Model ).material( Color.of(  60/255,  30/255,  130/255, 1 ), .1, .5, .4, 40 ),
+                             claw_machine_color: context.get_instance( Phong_Model ).material( Color.of( 60/255,  30/255,  130/255, 1 ), .006, .5, .4, 40, context.get_instance( "assets/bw_messy.jpg" )  ),
+                             diamond: context.get_instance( Phong_Model ).material( Color.of( 0, 0, 0, 1 ), 1, 0, 1, 40, context.get_instance( "assets/diamond.png" ) ),
+                             black: context.get_instance( Phong_Model ).material( Color.of( 0.05, 0.05, 0.05, 1 ), .4, 1, 1, 40 ),
                              arcade_carpet: context.get_instance( Phong_Model ).material( Color.of( 0, 0, 0, 1 ), .4, 0, 0, 40, context.get_instance( "assets/arcade_carpet.jpg" ) ),
                              terry_crews: context.get_instance( Phong_Model ).material( Color.of( 0, 0, 0, 1 ), .8, 0, 0, 40, context.get_instance( "assets/terry_crews.jpg" ) ),
                              brick: context.get_instance( Phong_Model ).material( Color.of( 0, 0, 0, 1 ), .06, 0, 0, 40, context.get_instance( "assets/brick.jpg" ) ),
-                             gradient_bw: context.get_instance( Phong_Model ).material( Color.of( .4, .4, .4, 1 ), .7, 0, 0, 40, context.get_instance( "assets/gradient_bw.png" ) )
+                             gradient_bw: context.get_instance( Phong_Model ).material( Color.of( .3, .3, .1, 1 ), .8, .3, .3, 40, context.get_instance( "assets/gradient_bw.png" ) ),
+                             porcelain: context.get_instance( Phong_Model ).material( Color.of( 0, 0, 0, 1 ), .4, 1, 1, 40, context.get_instance( "assets/porcelain.jpg" ) ),
+                             bw_messy: context.get_instance( Phong_Model ).material( Color.of( 0, 0, 0, 1 ), .4, 1, 1, 40, context.get_instance( "assets/bw_messy.jpg" ) )
                            });
                              
       // Whether the target of the controls is the claw
@@ -754,6 +798,7 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       
       // Flag: target is camera
       this.target_is_a_camera = function() { return context.globals.movement_target_is_a_camera };
+      context.globals.movement_target_is_a_camera = false;
       
       // Camera transform
       this.get_cam_tf = function() { return context.globals.graphics_state.camera_transform }
@@ -774,14 +819,39 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       this.get_prize_tf = function() { return context.globals.prize_tf };
       this.set_prize_tf = function( new_prize_tf ) { context.globals.prize_tf = new_prize_tf };
       
+      
       // Item array
-      this.items_tfs = new Array(2).fill( Mat4.identity() );
+      let num_items = 7;
+      this.items_tfs = new Array(num_items).fill( Mat4.identity() );
       this.items_models = [
           this.shapes.teapot,
-          this.shapes.diamond
+          this.shapes.diamond,
+          this.shapes.capped_cylinder,
+          this.shapes.ball,
+          this.shapes.teapot,
+          this.shapes.diamond,
+          this.shapes.capped_cylinder
+        ];
+      this.items_adjustment_tfs = [
+          Mat4.identity().times( Mat4.translation( Vec.of( 0, -.65, 0 ) ) ).times( Mat4.rotation( Math.random() * 2 * Math.PI, Vec.of( 0, 1, 0 ) ) ).times( Mat4.rotation( -1 * Math.PI/2, Vec.of( 1, 0, 0 ) ) ),
+          Mat4.identity().times( Mat4.translation( Vec.of( 0, -1.05, 0 ) ) ).times( Mat4.rotation( Math.random() * 2 * Math.PI, Vec.of( 0, 1, 0 ) ) ).times( Mat4.rotation( -1 * Math.PI/4, Vec.of( 1, 0, 0 ) ) ),
+          Mat4.identity().times( Mat4.translation( Vec.of( 0, -1.43, 0 ) ) ).times( Mat4.rotation( Math.random() * 2 * Math.PI, Vec.of( 0, 1, 0 ) ) ).times( Mat4.rotation( -1 * Math.PI/2, Vec.of( 1, 0, 0 ) ) ),
+          Mat4.identity().times( Mat4.translation( Vec.of( 0, -0.53, 0 ) ) ).times( Mat4.rotation( Math.random() * 2 * Math.PI, Vec.of( 0, 1, 0 ) ) ),
+          Mat4.identity().times( Mat4.translation( Vec.of( 0, -.65, 0 ) ) ).times( Mat4.rotation( Math.random() * 2 * Math.PI, Vec.of( 0, 1, 0 ) ) ).times( Mat4.rotation( -1 * Math.PI/2, Vec.of( 1, 0, 0 ) ) ),
+          Mat4.identity().times( Mat4.translation( Vec.of( 0, -1.05, 0 ) ) ).times( Mat4.rotation( Math.random() * 2 * Math.PI, Vec.of( 0, 1, 0 ) ) ).times( Mat4.rotation( -1 * Math.PI/4, Vec.of( 1, 0, 0 ) ) ),
+          Mat4.identity().times( Mat4.translation( Vec.of( 0, -1.43, 0 ) ) ).times( Mat4.rotation( Math.random() * 2 * Math.PI, Vec.of( 0, 1, 0 ) ) ).times( Mat4.rotation( -1 * Math.PI/2, Vec.of( 1, 0, 0 ) ) )
+        ];
+      this.items_colors = [
+          this.yellow,
+          this.diamond,
+          this.blue,
+          this.yellow,
+          this.yellow,
+          this.diamond,
+          this.blue
         ];
       this.items_won = function() { return context.globals.items_won };
-      context.globals.items_won = new Array(2).fill(false);
+      context.globals.items_won = new Array(num_items).fill(false);
       
       // Flag: button pressed
       context.globals.button_pressed = false;
@@ -792,12 +862,14 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       this.get_claw_velocity = function() { return context.globals.claw_velocity };
       this.set_claw_velocity = function( new_vel ) { context.globals.claw_velocity = new_vel };
       
-      ///////////////////////////////////////
-      ///////////////// tts /////////////////
-      ///////////////////////////////////////
+      // Springs_Demo
       Object.assign( this, { orange: context.get_instance( Phong_Model ).material( Color.of( .8,.4,0,1 ), .3, .8, .8, 40, context.get_instance( "/assets/rgb.jpg" ) ), globals: context.globals,
                      nodes: [], segments: [], time_accumulator: 0, time_scale: 1/2000, t: 0, dt: 1/500, N: 40  } );            // Define the step size for time, and the amount of
       this.reset();
+      
+      // Text
+      this.submit_shapes( context, { cube: new Cube(), text: new Text_Line( 35 ) } );
+      Object.assign( this, { text_image: context.get_instance( Phong_Model ).material( Color.of( 0,0,0,1 ), 1, 0, 0, 1, context.get_instance( "/assets/text.png" ) ) } );
       
     }
     
@@ -810,9 +882,8 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
     {
       this.fps = Math.round( 1/graphics_state.animation_delta_time * 1000 );
       
-      graphics_state.lights = [ new Light( Vec.of(  30, 80,  34, 1 ), Color.of( 60/255, 30/255, 120/255, 1 ), 20000 ), // point purple from top
-                                new Light( Vec.of(  30, -100,  34, 1 ), Color.of( 151/255, 255/255, 255/255, 1 ), 5000 ), // point teal from bottom
-                                new Light( Vec.of( 100, 50, 150, 1 ), Color.of( 60/255, 30/255, 120/255, 1 ), 10000 ), // point purple from front
+      graphics_state.lights = [ new Light( Vec.of(  0, 500,  200, 1 ), Color.of( 255/255, 155/255, 155/255, 1 ), 300000 ), // point purple from top
+                                new Light( Vec.of( 0, 1, 0, 0 ), Color.of( 255/255, 255/255, 200/255, 1 ), 10 ), // point purple from front
                               ]
       
       // Useful variables that are used throughout the display() function
@@ -842,7 +913,7 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       let claw_machine_tf = origin_tf.times( Mat4.translation( Vec.of( -1, 16, 4 ) ) ).times( Mat4.rotation( Math.PI * -1/2, Vec.of( 0, 1, 0 ) ) );
       let claw_machine_scale = 35;
       scale = Mat4.scale( Vec.of( claw_machine_scale, claw_machine_scale, claw_machine_scale ) );
-      this.shapes.claw_machine.draw( graphics_state, claw_machine_tf.times( scale ), this.purple );
+      this.shapes.claw_machine.draw( graphics_state, claw_machine_tf.times( scale ), this.claw_machine_color );
       
       // Claw machine's windows
       let window_scale = claw_machine_scale * 23/30;
@@ -877,7 +948,7 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       
       rotate = Mat4.translation( Vec.of( 0, -2.5, 0 ) ).times( this.get_joystick_rot_tf() ).times( Mat4.translation( Vec.of( 0, 2.5, 0 ) ) );
       rotate_z = Mat4.rotation( Math.PI * -1/25, Vec.of( 0, 0, 1 ) )
-      this.shapes.joystick.draw( graphics_state, joystick_tf.times( rotate_z ).times( rotate ).times( scale ), this.joystick_color )
+      this.shapes.joystick.draw( graphics_state, joystick_tf.times( rotate_z ).times( rotate ).times( scale ), this.black )
       
       // Claw machine's button
       let button_scale = claw_machine_scale * 2/55
@@ -897,17 +968,57 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
         }
       
       // Potential prizes
+      let i = 0;
+      let j = 0;
       
-      for ( let i = 0; i < this.items_tfs.length; i++ )
+      let num_col = 3;
+      let num_row = 1;
+      let dist_between_items = 8;
+      let start_x = -8;
+      let start_z = -8;
+      
+      let num_placed_1 = 0;
+      
+      for ( i = 0; i < num_row; i++ )
         {
-          this.items_tfs[i] = origin_tf.times( Mat4.translation( Vec.of( 3*i, 2.1, 3*i ) ) );
+          for ( j = 0; j < num_col; j++ )
+          {
+            if ( num_col*i + j >= this.items_tfs.length)
+              {
+                break;
+              }
+              
+            this.items_tfs[num_col*i + j] = origin_tf.times( Mat4.translation( Vec.of( start_x + dist_between_items*j, 2.1, start_z + dist_between_items*i ) ) );
+            num_placed_1++;
+          }
         }
+      
+      num_col = 2;
+      num_row = 2;
+      dist_between_items = 8;
+      start_x = 0;
+      start_z = 0;
+      
+      let num_placed_2 = 0;
+      
+      for ( i = 0; i < num_row; i++ )
+        {
+          for ( j = 0; j < num_col; j++ )
+          {
+            if ( num_col*i + j + num_placed_1 >= this.items_tfs.length)
+              {
+                break;
+              }
+              
+            this.items_tfs[num_col*i + j + num_placed_1] = origin_tf.times( Mat4.translation( Vec.of( start_x + dist_between_items*j, 2.1, start_z + dist_between_items*i ) ) );
+            num_placed_2++;
+          }
+        }
+      
       
       if ( this.get_item_picked_up() )
         {
           this.items_tfs[ this.get_item_num() ] = this.get_prize_tf();
-          //cip
-          //this.items_tfs[ this.get_item_num() ] = this.get_pickup_tf();
         }
       
       //console.log( this.get_pickup_tf().times( Vec.of( 0, 0, 0, 1 ) ) );
@@ -921,13 +1032,13 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
             }
           else // Draw item if not won
             {
-              this.items_models[i].draw( graphics_state, this.items_tfs[i].times( Mat4.scale( Vec.of( 2, 2, 2 ) ) ), this.diamond );
+              this.items_models[i].draw( graphics_state, this.items_tfs[i].times( this.items_adjustment_tfs[i] ).times( Mat4.scale( Vec.of( 2, 2, 2 ) ) ), this.items_colors[i] );
             }
         }
         
       // Claw
       let claw_tf = this.get_claw_tf();
-      this.draw_claw( graphics_state, claw_tf, this.silver );
+      this.draw_claw( graphics_state, claw_tf.times( Mat4.rotation( Math.PI, Vec.of( 0, 1, 0 ) ) ), this.silver );
       
       // Claw's support bars
       let support_bar_h = 41  ;
@@ -962,16 +1073,16 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
               
               if ( dist_to_toy < 2 )
                 {
-                  <!-- //cip -->
-                  <!-- if ( this.get_item_num != i ) -->
-                    <!-- { -->
-                      <!-- this.set_pickup_tf( this.items_tfs[i] ) -->
-                      <!-- console.log( this.get_pickup_tf() ) -->
-                    <!-- } -->
-                
                   this.set_item_picked_up(true);
                   this.set_item_num(i);
-                  break;
+                  
+                  this.shapes.text.set_string( "Nice!" );
+                  this.shapes.text.draw( graphics_state, this.items_tfs[ i ].times( Mat4.translation( Vec.of( -1.4, 2.2, 0 ) ) ).times( Mat4.scale( Vec.of( 0.5, 0.5, 1 ) ) ), this.text_image );
+                }
+              else if ( dist_to_toy < 5 )
+                {
+                  this.shapes.text.set_string( "Close!" );
+                  this.shapes.text.draw( graphics_state, this.items_tfs[ i ].times( Mat4.translation( Vec.of( -1.7, 2.2, 0 ) ) ).times( Mat4.scale( Vec.of( 0.5, 0.5, 1 ) ) ), this.text_image );
                 }
             }
         }
@@ -993,7 +1104,8 @@ class My_Animation extends Scene_Component  // Code your butterfly assignment be
       //      - do it in coroutine?
       //    make movie?
       
-      // TTS
+      
+      // Springs_Demo
       if( this.globals.animate ) this.simulate( graphics_state.animation_delta_time );                 // Advance the time and state of our whole simulation.
       this.blend_state();
       
