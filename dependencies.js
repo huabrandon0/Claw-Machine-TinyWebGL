@@ -399,7 +399,7 @@ class Movement_Controls extends Scene_Component    // A Scene_Component that our
       this.target = function() { return context.globals.movement_controls_target() }                                      // The camera matrix is not actually stored here inside Movement_Controls; instead, track
       this.target_is_a_camera = function() { return context.globals.movement_target_is_a_camera }                         // an external matrix to modify. This target is a reference (made with closures) kept
       context.globals.movement_controls_target = function(t) { return context.globals.graphics_state.camera_transform };  // in "globals" so it can be seen and set by other classes.  Initially, the default target
-      context.globals.movement_target_is_a_camera = true;                                           // is a camera matrix stored in the global graphics_state object, for Shaders to use.
+      context.globals.movement_target_is_a_camera = false;                                           // is a camera matrix stored in the global graphics_state object, for Shaders to use.
       
       // *** Mouse controls: ***
       this.mouse = { "from_center": Vec.of(0,0) };                           // Measure mouse steering, for rotating the flyaround camera:
@@ -411,7 +411,7 @@ class Movement_Controls extends Scene_Component    // A Scene_Component that our
     }
   make_control_panel()   // This function of a scene sets up its keyboard shortcuts.
     { const globals = this.globals;
-      this.control_panel.innerHTML += "Click and drag the scene to <br> spin your viewpoint around it.<br>";
+      this.control_panel.innerHTML += "Decided to keep this in so that someone<br>could explore the scene if they wanted to.<br>Press c to toggle between this mode<br>and play mode.<br>";
       this.key_triggered_button( "Up",     "space", function() { this.space_key = 1; }, undefined, function() { this.space_key = 0; } );
       this.key_triggered_button( "Forward",    "w", function() { this.w_key = 1; }, undefined, function() { this.w_key = 0; } ); this.new_line();
       this.key_triggered_button( "Left",       "a", function() { this.a_key = 1; }, undefined, function() { this.a_key = 0; } );
@@ -421,14 +421,21 @@ class Movement_Controls extends Scene_Component    // A Scene_Component that our
       this.key_triggered_button( "Roll left",  ",", function() { this.roll      =  1 }, undefined, function() { this.roll      = 0 } );
       this.key_triggered_button( "Roll right", ".", function() { this.roll      = -1 }, undefined, function() { this.roll      = 0 } ); this.new_line();
       this.key_triggered_button( "(Un)freeze look around",   "f",       function() { this.look_around_locked  ^=  1 },    "green" );    this.new_line();
-      this.live_string( () => { return "Position: "            + this.   pos[0].toFixed(2) + ", " + this.   pos[1].toFixed(2) + ", " + this.   pos[2].toFixed(2) } ); this.new_line();
-      this.live_string( () => { return "Center of rotation: "  + this.origin[0].toFixed(0) + ", " + this.origin[1].toFixed(0) + ", " + this.origin[2].toFixed(0) } ); this.new_line();
-      this.live_string( () => { return "Facing: " + ( ( this.z_axis[0] > 0 ? "West " : "East ")             // (Actually affected by the left hand rule)
-                                                    + ( this.z_axis[1] > 0 ? "Down " : "Up " ) + ( this.z_axis[2] > 0 ? "North" : "South" ) ) } ); this.new_line();
+      // this.live_string( () => { return "Position: "            + this.   pos[0].toFixed(2) + ", " + this.   pos[1].toFixed(2) + ", " + this.   pos[2].toFixed(2) } ); this.new_line();
+      // this.live_string( () => { return "Center of rotation: "  + this.origin[0].toFixed(0) + ", " + this.origin[1].toFixed(0) + ", " + this.origin[2].toFixed(0) } ); this.new_line();
+      // this.live_string( () => { return "Facing: " + ( ( this.z_axis[0] > 0 ? "West " : "East ")             // (Actually affected by the left hand rule)
+                                                    // + ( this.z_axis[1] > 0 ? "Down " : "Up " ) + ( this.z_axis[2] > 0 ? "North" : "South" ) ) } ); this.new_line();
       
-      this.key_triggered_button( "Move spin center to here", "o",       function() { this.origin = Mat4.inverse( this.target() ).times( Vec.of(0,0,0,1) ).to3() },    "brown" ); this.new_line();
-      this.key_triggered_button( "Go to world origin",       "r",       function() { this.target().set_identity( 4,4 ) }, "orange" ); this.new_line();
-      this.key_triggered_button( "Reset target to main camera", "shift+r", function() { globals.movement_controls_target = function() { return globals.graphics_state.camera_transform }; globals.movement_target_is_a_camera = true; }, "blue" ); this.new_line();
+      this.new_line();
+      this.key_triggered_button( "Toggle mode", "c", function()
+                                                          {
+                                                            this.globals.movement_target_is_a_camera = !this.globals.movement_target_is_a_camera;
+                                                            this.globals.target_is_claw = !this.globals.movement_target_is_a_camera;
+                                                          }, "red" ); this.new_line(); //cip
+      
+      //this.key_triggered_button( "Move spin center to here", "o",       function() { this.origin = Mat4.inverse( this.target() ).times( Vec.of(0,0,0,1) ).to3() },    "brown" ); this.new_line();
+      //this.key_triggered_button( "Go to world origin",       "r",       function() { this.target().set_identity( 4,4 ) }, "orange" ); this.new_line();
+      //this.key_triggered_button( "Reset target to main camera", "shift+r", function() { globals.movement_controls_target = function() { return globals.graphics_state.camera_transform }; globals.movement_target_is_a_camera = true; }, "blue" ); this.new_line();
     }
   first_person_effects             ( radians_per_frame, meters_per_frame, offsets_from_dead_box )
     { if( !this.look_around_locked ) 
