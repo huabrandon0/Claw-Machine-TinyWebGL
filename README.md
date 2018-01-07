@@ -7,3 +7,5 @@ The launch_server.bat file hosts the folder locally (on port 8000) so that the a
 Then, it opens the game using Chrome.
 
 [A gameplay video](https://www.youtube.com/watch?v=JT3nubNnHVs&feature=youtu.be).
+
+[Playable here as of 1/7/2018 (go to #5)](http://web.cs.ucla.edu/~dt/courses/CS174A/animations/assignment2-best-17f/)
